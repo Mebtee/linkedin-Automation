@@ -4,7 +4,7 @@
  * Values here are structural defaults only. They are finalized during the
  * post-generation phase; nothing in this phase consumes them.
  */
-export const contentRules = {
+export const content = {
   post: {
     // LinkedIn's hard character limit for a single post.
     maxCharacters: 3000,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { applicationConfig } from "@/config/application";
+import { app } from "@/config/app";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +14,14 @@ export function GET() {
   try {
     const body: HealthResponse = {
       status: "ok",
-      application: applicationConfig.id,
+      application: app.id,
       timestamp: new Date().toISOString(),
     };
     return NextResponse.json(body);
   } catch {
     const body: HealthResponse = {
       status: "error",
-      application: applicationConfig.id,
+      application: app.id,
       timestamp: new Date().toISOString(),
     };
     return NextResponse.json(body, { status: 500 });

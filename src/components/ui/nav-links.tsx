@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import type { NavigationItem } from "@/config/application";
+import type { NavigationItem } from "@/config/app";
 
 type NavLinksProps = {
   items: readonly NavigationItem[];
