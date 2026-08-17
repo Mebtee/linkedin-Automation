@@ -10,6 +10,7 @@ import { assertNonEmptyString } from "@/services/validation";
  */
 const SERVER_ENV_VARS = {
   supabaseServiceRoleKey: "SUPABASE_SERVICE_ROLE_KEY",
+  aiTextProvider: "AI_TEXT_PROVIDER",
 } as const;
 
 export type ServerEnvKey = keyof typeof SERVER_ENV_VARS;
@@ -21,6 +22,7 @@ function read(name: string): string | undefined {
 
 export const serverEnv = {
   supabaseServiceRoleKey: read(SERVER_ENV_VARS.supabaseServiceRoleKey),
+  aiTextProvider: read(SERVER_ENV_VARS.aiTextProvider),
 } as const;
 
 /**

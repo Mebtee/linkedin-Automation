@@ -41,7 +41,7 @@ export const brand = {
   },
   image: {
     width: 1200,
-    height: 628,
+    height: 1200,
   },
   mark: null,
 } as const satisfies BrandConfig;

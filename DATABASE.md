@@ -123,6 +123,87 @@ Daily learning journal entries — the source of truth for AI content generation
 
 ---
 
+### `generated_posts` (Phase 3B)
+
+AI-generated LinkedIn content derived from journal entries. Each post is created by an AI provider and persisted for later editing, approval, and publishing.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Entry ID |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `journal_entry_id` | `uuid` | NOT NULL, FK → `daily_learning_entries(id)` ON DELETE CASCADE | Source journal entry |
+| `day_number` | `integer` | NOT NULL, FK → `curriculum_days(day_number)` ON DELETE RESTRICT | Curriculum day |
+| `status` | `post_status` | NOT NULL, default `'draft'` | Lifecycle status |
+| `format` | `text` | NOT NULL | Post format (PostFormat type) |
+| `opening` | `text` | NOT NULL | Opening hook line |
+| `body` | `text` | NOT NULL | Main content body |
+| `takeaway` | `text` | NOT NULL | Key takeaway |
+| `next_step` | `text` | NOT NULL | Next step/focus |
+| `hashtags` | `text[]` | NOT NULL, default `'{}'` | Hashtag strings |
+| `image_headline` | `text` | nullable | Image headline (future) |
+| `image_subheadline` | `text` | nullable | Image subheadline (future) |
+| `image_keywords` | `text[]` | nullable | Image keywords (future) |
+| `image_visual_concept` | `text` | nullable | Visual concept (future) |
+| `image_template` | `text` | nullable | Template ID (future) |
+| `provider` | `text` | NOT NULL | AI provider name |
+| `model` | `text` | NOT NULL | AI model name |
+| `tokens_used` | `integer` | nullable | Token count (if available) |
+| `content_hash` | `text` | NOT NULL | SHA-256 hash for duplicate detection |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
+
+**Constraints:**
+- `(profile_id, day_number, format, content_hash)` is **UNIQUE** — prevents duplicate content per user/day/format
+- Allows multiple different drafts per day (different content)
+- `day_number` FK references `curriculum_days(day_number)` — must be a valid day (1–105)
+- `journal_entry_id` FK references `daily_learning_entries(id)` — must be a valid journal entry
+- `profile_id` FK references `profiles(id)` — cascade delete when profile is removed
+
+**Indexes:**
+- `idx_gp_profile_id` on `(profile_id)` — all posts for a user
+- `idx_gp_day_number` on `(day_number)` — all posts for a curriculum day
+- `idx_gp_profile_day` on `(profile_id, day_number)` — fast user+day lookup
+- `idx_gp_profile_status` on `(profile_id, status)` — filter by status
+- `idx_gp_journal_entry_id` on `(journal_entry_id)` — posts from a journal entry
+- `idx_gp_content_hash` on `(content_hash)` — duplicate detection
+
+**Status lifecycle:**
+- `draft` → `approved` → `published`
+- `draft` → `failed`
+- `published` and `failed` are terminal states
+
+---
+
+### `media_assets`
+
+Stores metadata for generated images. SVG files live in Supabase Storage; this table tracks metadata.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Asset ID |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `generated_post_id` | `uuid` | NOT NULL, FK → `generated_posts(id)` ON DELETE CASCADE, UNIQUE | Source post |
+| `storage_path` | `text` | NOT NULL | Supabase Storage path (`{profileId}/{postId}/image.svg`) |
+| `storage_url` | `text` | NOT NULL | Public URL for accessing the asset |
+| `mime_type` | `text` | NOT NULL, default `'image/svg+xml'` | MIME type |
+| `width` | `integer` | NOT NULL | Image width in pixels |
+| `height` | `integer` | NOT NULL | Image height in pixels |
+| `template` | `text` | NOT NULL | Image template used for generation |
+| `alt_text` | `text` | NOT NULL | Accessible alt text |
+| `metadata` | `jsonb` | nullable | Additional metadata |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Creation timestamp |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Last update timestamp |
+
+**Indexes:**
+- `idx_ma_profile_id` on `(profile_id)` — user's assets
+- `idx_ma_generated_post_id` on `(generated_post_id)` — asset for a post
+- `idx_ma_storage_path` on `(storage_path)` — storage lookup
+
+**Constraints:**
+- UNIQUE on `generated_post_id` — one image per generated post (replaced on regeneration)
+
+---
+
 ## Relationships
 
 ```
@@ -140,19 +221,39 @@ profiles
   │     ▼
   │   curriculum_days
   │
+  ├── 1:N (profile_id FK)
+  │   ▼
+  │ daily_learning_entries
+  │   │
+  │   └── N:1 (day_number FK → curriculum_days)
+  │
+  ├── 1:N (profile_id FK)
+  │   ▼
+  │ generated_posts
+  │   │
+  │   ├── N:1 (journal_entry_id → daily_learning_entries.id) ON DELETE CASCADE
+  │   ├── N:1 (day_number → curriculum_days.day_number) ON DELETE RESTRICT
+  │   └── 1:0..1 (generated_post_id → media_assets)
+  │
   └── 1:N (profile_id FK)
       ▼
-    daily_learning_entries
-      │
-      └── N:1 (day_number FK → curriculum_days)
+    media_assets
+      └── N:1 (generated_post_id → generated_posts.id) ON DELETE CASCADE
 ```
 
 - A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
 - A **module** contains many **curriculum_days** (via `module_id` FK).
 - A **profile** has many **daily_learning_entries** (via `profile_id` FK).
 - A **daily_learning_entry** references one **curriculum_day** (via `day_number` FK).
+- A **profile** has many **generated_posts** (via `profile_id` FK).
+- A **generated_post** references one **daily_learning_entry** (via `journal_entry_id` FK).
+- A **generated_post** references one **curriculum_day** (via `day_number` FK).
+- A **generated_post** has zero or one **media_asset** (via `generated_post_id` FK, UNIQUE).
+- A **media_asset** references one **generated_post** (via `generated_post_id` FK) and one **profile** (via `profile_id` FK).
 - `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
 - `ON DELETE RESTRICT` on `daily_learning_entries.day_number` prevents deleting a curriculum day that has journal entries.
+- `ON DELETE RESTRICT` on `generated_posts.day_number` prevents deleting a curriculum day that has generated posts.
+- `ON DELETE CASCADE` on `generated_posts.journal_entry_id` removes posts when their source journal entry is deleted.
 
 ---
 
@@ -164,6 +265,8 @@ profiles
 | `modules_set_updated_at` | `modules` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `curriculum_days_set_updated_at` | `curriculum_days` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `daily_learning_entries_set_updated_at` | `daily_learning_entries` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `generated_posts_set_updated_at` | `generated_posts` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `media_assets_set_updated_at` | `media_assets` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 
 The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
 
@@ -171,12 +274,14 @@ The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPD
 
 ## Row Level Security (RLS)
 
-All four tables have RLS **enabled** with restrictive policies:
+All six tables have RLS **enabled** with restrictive policies:
 
 - **`profiles`**: Owner-only access (`auth.uid() = id`) for all operations.
 - **`modules`**: SELECT for authenticated users only; no write access for users.
 - **`curriculum_days`**: SELECT for authenticated users only; no write access for users.
 - **`daily_learning_entries`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
+- **`generated_posts`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
+- **`media_assets`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **Anonymous users**: No access to any table.
 - **Service-role**: Bypasses all RLS (server-side only).
 
@@ -213,6 +318,24 @@ All four tables have RLS **enabled** with restrictive policies:
 11. **Unique user+day constraint** — `(profile_id, day_number)` UNIQUE prevents accidental duplicate entries for the same curriculum day.
 
 12. **Controlled status enum** — `journal_status` (`draft` → `submitted` → `used`) provides a clear lifecycle without requiring a separate status table.
+
+13. **Generated posts use content hash for duplicate detection** — `content_hash` is a SHA-256 hash of normalized post content. The unique constraint on `(profile_id, day_number, format, content_hash)` prevents exact duplicate content while allowing multiple different drafts per day.
+
+14. **Generated posts reference journal entries** — `journal_entry_id` FK links each generated post to its source journal entry. CASCADE delete ensures posts are removed when their journal entry is deleted.
+
+15. **Generated posts use RESTRICT on day_number** — prevents deleting curriculum days that have generated posts, maintaining data integrity.
+
+16. **Image metadata preserved but not generated** — `image_headline`, `image_subheadline`, `image_keywords`, `image_visual_concept`, `image_template` columns store structured image data for future image-generation phases without requiring a schema redesign.
+
+17. **Post status lifecycle is minimal** — `draft` → `approved` → `published` (with `failed` for errors). No unnecessary states. Terminal states (`published`, `failed`) cannot be reverted.
+
+18. **Media assets use UNIQUE on generated_post_id** — one image per generated post. On regeneration, the old asset is replaced (delete + insert) rather than creating uncontrolled duplicates.
+
+19. **Media assets reference both profile and post** — `profile_id` for RLS ownership, `generated_post_id` for the associated post. CASCADE delete ensures assets are removed when their post is deleted.
+
+20. **Storage path prevents collisions** — `{profile_id}/{post_id}/image.svg` ensures users cannot accidentally overwrite each other's files.
+
+21. **Media assets store metadata separately from storage** — the `media_assets` table tracks dimensions, template, alt text, and metadata. The actual SVG lives in Supabase Storage.
 
 ---
 

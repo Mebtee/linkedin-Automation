@@ -1,0 +1,237 @@
+import { createClient } from "@/lib/supabase/server";
+import { AppError } from "@/lib/utils/errors";
+import type { PostFormat } from "@/types/ai";
+import type { GeneratedPostRow, CreateGeneratedPostInput } from "@/types/generated-post";
+import type { JournalEntry } from "@/types/journal";
+import type { CurriculumDayRow } from "@/services/curriculum/dayProgress";
+import { getTextGenerationProvider } from "./index";
+import { validateGeneratedPostPayload } from "./validation";
+import { buildPostGenerationInput, selectDefaultFormat } from "./input-builder";
+import { createContentHash } from "@/services/generated-posts/hashing";
+import { createGeneratedPost, checkDuplicatePost } from "@/services/generated-posts";
+
+// ─── Error Codes ─────────────────────────────────────────────────────────────
+
+export type GenerationErrorCode =
+  | "GENERATION_UNAUTHORIZED"
+  | "CURRICULUM_NOT_FOUND"
+  | "JOURNAL_NOT_FOUND"
+  | "JOURNAL_NOT_SUBMITTED"
+  | "GENERATION_DUPLICATE"
+  | "GENERATION_FAILED";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function requireAuth(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ id: string }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new AppError("Authentication required to generate posts.", {
+      code: "GENERATION_UNAUTHORIZED",
+    });
+  }
+
+  return user;
+}
+
+async function loadCurriculumDay(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dayNumber: number,
+): Promise<CurriculumDayRow> {
+  const { data, error } = await supabase
+    .from("curriculum_days")
+    .select("*")
+    .eq("day_number", dayNumber)
+    .single();
+
+  if (error || !data) {
+    throw new AppError(
+      `Curriculum day ${dayNumber} not found.`,
+      { code: "CURRICULUM_NOT_FOUND" },
+    );
+  }
+
+  return data as CurriculumDayRow;
+}
+
+async function loadModule(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  moduleId: string,
+): Promise<{ module_number: number; title: string }> {
+  const { data, error } = await supabase
+    .from("modules")
+    .select("module_number, title")
+    .eq("id", moduleId)
+    .single();
+
+  if (error || !data) {
+    throw new AppError("Module not found.", { code: "CURRICULUM_NOT_FOUND" });
+  }
+
+  return data;
+}
+
+async function loadJournalEntry(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  dayNumber: number,
+): Promise<JournalEntry> {
+  const { data, error } = await supabase
+    .from("daily_learning_entries")
+    .select("*")
+    .eq("profile_id", userId)
+    .eq("day_number", dayNumber)
+    .single();
+
+  if (error || !data) {
+    throw new AppError(
+      `No journal entry found for Day ${dayNumber}. Please write a journal entry first.`,
+      { code: "JOURNAL_NOT_FOUND" },
+    );
+  }
+
+  return data as JournalEntry;
+}
+
+// ─── Main Generation Function ────────────────────────────────────────────────
+
+/**
+ * Generates a LinkedIn post for a specific curriculum day.
+ *
+ * Flow:
+ *   1. Authenticate user
+ *   2. Validate day number
+ *   3. Load curriculum day + module
+ *   4. Load journal entry (must be submitted)
+ *   5. Build PostGenerationInput
+ *   6. Select post format
+ *   7. Call AI provider
+ *   8. Validate provider output
+ *   9. Calculate content hash
+ *  10. Check for duplicates
+ *  11. Persist generated post
+ *  12. Return saved post
+ *
+ * The generated post always starts as "draft".
+ * Generation never auto-approves or auto-publishes.
+ */
+export async function generatePostForDay(
+  dayNumber: number,
+  format?: PostFormat,
+): Promise<GeneratedPostRow> {
+  // 1. Authenticate
+  const supabase = await createClient();
+  const user = await requireAuth(supabase);
+
+  // 2. Validate day number
+  if (typeof dayNumber !== "number" || !Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 105) {
+    throw new AppError(
+      `Invalid day number ${dayNumber}. Must be between 1 and 105.`,
+      { code: "VALIDATION_ERROR" },
+    );
+  }
+
+  // 3. Load curriculum day
+  const curriculumDay = await loadCurriculumDay(supabase, dayNumber);
+
+  // 4. Load module
+  const moduleData = await loadModule(supabase, curriculumDay.module_id);
+
+  // 5. Load journal entry
+  const journal = await loadJournalEntry(supabase, user.id, dayNumber);
+
+  // 6. Verify journal is submitted
+  if (journal.status !== "submitted") {
+    throw new AppError(
+      `Journal entry for Day ${dayNumber} must be submitted before generating a post. Current status: ${journal.status}.`,
+      { code: "JOURNAL_NOT_SUBMITTED" },
+    );
+  }
+
+  // 7. Select format
+  const selectedFormat = format ?? selectDefaultFormat(dayNumber);
+
+  // 8. Build input
+  const input = buildPostGenerationInput({
+    curriculumDay,
+    module: moduleData,
+    journal,
+    format: selectedFormat,
+  });
+
+  // 9. Call AI provider
+  const provider = getTextGenerationProvider();
+  let result;
+  try {
+    result = await provider.generatePost(input);
+  } catch (err) {
+    throw new AppError(
+      `Post generation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      { code: "GENERATION_FAILED", cause: err },
+    );
+  }
+
+  // 10. Validate provider output
+  let validatedPayload;
+  try {
+    validatedPayload = validateGeneratedPostPayload(result.payload);
+  } catch (err) {
+    throw new AppError(
+      `Provider returned invalid output: ${err instanceof Error ? err.message : "Validation failed"}`,
+      { code: "GENERATION_FAILED", cause: err },
+    );
+  }
+
+  // 11. Calculate content hash
+  const contentHash = createContentHash({
+    opening: validatedPayload.post.opening,
+    body: validatedPayload.post.body,
+    takeaway: validatedPayload.post.takeaway,
+    nextStep: validatedPayload.post.nextStep,
+    hashtags: validatedPayload.post.hashtags,
+  });
+
+  // 12. Check for duplicates
+  const isDuplicate = await checkDuplicatePost(
+    user.id,
+    dayNumber,
+    selectedFormat,
+    contentHash,
+  );
+
+  if (isDuplicate) {
+    throw new AppError(
+      "A generated post with identical content already exists for this day and format.",
+      { code: "GENERATION_DUPLICATE" },
+    );
+  }
+
+  // 13. Persist
+  const createInput: CreateGeneratedPostInput = {
+    journal_entry_id: journal.id,
+    day_number: dayNumber,
+    format: selectedFormat,
+    opening: validatedPayload.post.opening,
+    body: validatedPayload.post.body,
+    takeaway: validatedPayload.post.takeaway,
+    next_step: validatedPayload.post.nextStep,
+    hashtags: validatedPayload.post.hashtags,
+    image_headline: validatedPayload.image.headline,
+    image_subheadline: validatedPayload.image.subheadline,
+    image_keywords: [...validatedPayload.image.keywords],
+    image_visual_concept: validatedPayload.image.visualConcept,
+    image_template: validatedPayload.image.template,
+    provider: result.metadata.provider,
+    model: result.metadata.model,
+    tokens_used: result.metadata.tokensUsed ?? null,
+    content_hash: contentHash,
+  };
+
+  const savedPost = await createGeneratedPost(createInput);
+
+  return savedPost;
+}
