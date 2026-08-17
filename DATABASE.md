@@ -147,7 +147,12 @@ All three tables have RLS **enabled** with permissive policies (`SELECT/INSERT/U
 
 8. **Indexes on common queries** — `day_number`, `module_id`, `week_number` are indexed for the most frequent access patterns (look up a day, filter by module, filter by week).
 
-9. **Permissive RLS** — all policies are wide-open for now. This is safe because the tables contain curriculum data (not user secrets). Policies will be tightened when auth is implemented.
+9. **Restrictive RLS** — policies enforce least-privilege access:
+   - `profiles`: owner-only (auth.uid() = id) for all operations
+   - `modules` / `curriculum_days`: SELECT for authenticated users only; no write access
+   - Anonymous users have no access to any table
+   - Service-role bypasses all RLS (server-side only)
+   See [SECURITY.md](./SECURITY.md) for full policy documentation.
 
 ---
 

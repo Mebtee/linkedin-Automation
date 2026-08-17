@@ -7,7 +7,8 @@ named `YYYYMMDDHHMMSS_name.sql` (created with `supabase migration new <name>`).
 
 | File | Description |
 |------|-------------|
-| `20260817000000_initial_schema.sql` | Core tables: `profiles`, `modules`, `curriculum_days` + triggers, indexes, RLS |
+| `20260817000000_initial_schema.sql` | Core tables: `profiles`, `modules`, `curriculum_days` + triggers, indexes |
+| `20260817100000_rls_policies.sql` | Row Level Security: owner-only profiles, read-only curriculum for auth users |
 
 ## Applying Migrations
 
