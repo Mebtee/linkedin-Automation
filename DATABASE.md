@@ -120,12 +120,13 @@ The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPD
 
 ## Row Level Security (RLS)
 
-All three tables have RLS **enabled** with permissive policies (`SELECT/INSERT/UPDATE/DELETE` for all roles). This is intentional for the current phase where auth is not yet implemented.
+All three tables have RLS **enabled** with restrictive policies (implemented in Phase 1F):
 
-**When auth is implemented:**
-- Tighten policies to check `auth.uid() = id` for profile access.
-- Curriculum data (modules, days) may remain readable by all authenticated users.
-- Write policies for curriculum tables should be restricted to admin/service-role.
+- **`profiles`**: Owner-only access (`auth.uid() = id`) for all operations.
+- **`modules`**: SELECT for authenticated users only; no write access for users.
+- **`curriculum_days`**: SELECT for authenticated users only; no write access for users.
+- **Anonymous users**: No access to any table.
+- **Service-role**: Bypasses all RLS (server-side only).
 
 ---
 
