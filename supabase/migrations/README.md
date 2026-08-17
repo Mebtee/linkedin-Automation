@@ -3,10 +3,24 @@
 Database migrations for the Supabase project go here, one SQL file per migration,
 named `YYYYMMDDHHMMSS_name.sql` (created with `supabase migration new <name>`).
 
-Nothing exists yet. Planned migrations (later phases):
+## Migrations
 
-- `initial_schema` — curriculum, journal entries, posts, assets, schedule
-- Auth-related triggers for `updated_at` timestamps and user ownership
+| File | Description |
+|------|-------------|
+| `20260817000000_initial_schema.sql` | Core tables: `profiles`, `modules`, `curriculum_days` + triggers, indexes, RLS |
+
+## Applying Migrations
+
+**Via Supabase CLI:**
+```bash
+supabase db push          # Apply to hosted project
+supabase migration up     # Apply locally
+```
+
+**Via Dashboard:**
+Copy the SQL into the Supabase SQL Editor and run.
+
+## Design
 
 The schema is designed as a single initial migration and then iterated with new
-migrations only.
+migrations only. See [DATABASE.md](../../DATABASE.md) for full documentation.

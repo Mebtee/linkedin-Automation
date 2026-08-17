@@ -1,0 +1,178 @@
+# DATABASE.md — Schema Documentation
+
+Supabase (PostgreSQL) schema for the 105-Day Full-Stack Learning Journey system.
+
+---
+
+## Tables
+
+### `profiles`
+
+One row per authenticated user. Created on first sign-up via Supabase Auth.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, FK → `auth.users(id)` ON DELETE CASCADE | User ID from Supabase Auth |
+| `display_name` | `text` | nullable | User's display name |
+| `timezone` | `text` | NOT NULL, default `'UTC'` | IANA timezone (e.g. `America/New_York`) |
+| `journey_start_date` | `date` | nullable | Date the user began their 105-day journey |
+| `current_day` | `integer` | NOT NULL, default `1`, CHECK `1–105` | Current day in the journey |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
+
+**Relationships:**
+- `profiles.id` → `auth.users.id` (1:1, cascade delete)
+
+---
+
+### `modules`
+
+Major curriculum modules (e.g. "HTML & CSS Foundations", "React Basics").
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Module ID |
+| `module_number` | `integer` | **UNIQUE**, NOT NULL | Sequential module number (1-based) |
+| `title` | `text` | NOT NULL | Module title |
+| `description` | `text` | nullable | Module description |
+| `weeks` | `integer` | nullable | Number of weeks |
+| `days` | `integer` | nullable | Number of days |
+| `hours` | `numeric(5,1)` | nullable | Estimated total hours (e.g. `12.5`) |
+| `start_day` | `integer` | NOT NULL, CHECK `1–105` | First day in the 105-day journey |
+| `end_day` | `integer` | NOT NULL, CHECK `1–105` | Last day in the 105-day journey |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
+
+**Constraints:**
+- `start_day <= end_day` (day range must be valid)
+
+**Indexes:**
+- `idx_modules_module_number` on `(module_number)`
+- `idx_modules_start_day` on `(start_day)`
+- `idx_modules_end_day` on `(end_day)`
+
+---
+
+### `curriculum_days`
+
+Each of the 105 individual learning days. Queryable by day number.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Day ID |
+| `day_number` | `integer` | **UNIQUE**, NOT NULL, CHECK `1–105` | 1-based day number |
+| `module_id` | `uuid` | NOT NULL, FK → `modules(id)` ON DELETE RESTRICT | Parent module |
+| `week_number` | `integer` | nullable | Week number within the journey (1-based) |
+| `topic` | `text` | NOT NULL | Main topic for this day |
+| `content` | `text` | nullable | Detailed content / learning material |
+| `subtopics` | `text[]` | nullable | Array of subtopic strings |
+| `project_information` | `text` | nullable | Hands-on project description |
+| `assessment_information` | `text` | nullable | Assessment / quiz details |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
+
+**Constraints:**
+- `day_number` must be `UNIQUE` and between `1` and `105`
+- `module_id` FK uses `ON DELETE RESTRICT` — a module cannot be deleted if days reference it
+
+**Indexes:**
+- `idx_curriculum_days_day_number` on `(day_number)` — fast single-day lookups
+- `idx_curriculum_days_module_id` on `(module_id)` — filter all days by module
+- `idx_curriculum_days_week` on `(week_number)` — filter by week
+
+---
+
+## Relationships
+
+```
+auth.users (Supabase Auth)
+  │
+  │ 1:1
+  ▼
+profiles
+  │
+  │ (implicit via module ordering)
+  ▼
+modules
+  │
+  │ 1:N (module_id FK)
+  ▼
+curriculum_days
+```
+
+- A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
+- A **module** contains many **curriculum_days** (via `module_id` FK).
+- `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
+
+---
+
+## Triggers
+
+| Trigger | Table | Function | Description |
+|---------|-------|----------|-------------|
+| `profiles_set_updated_at` | `profiles` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `modules_set_updated_at` | `modules` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `curriculum_days_set_updated_at` | `curriculum_days` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+
+The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
+
+---
+
+## Row Level Security (RLS)
+
+All three tables have RLS **enabled** with permissive policies (`SELECT/INSERT/UPDATE/DELETE` for all roles). This is intentional for the current phase where auth is not yet implemented.
+
+**When auth is implemented:**
+- Tighten policies to check `auth.uid() = id` for profile access.
+- Curriculum data (modules, days) may remain readable by all authenticated users.
+- Write policies for curriculum tables should be restricted to admin/service-role.
+
+---
+
+## Design Decisions
+
+1. **`profiles.id` references `auth.users(id)`** — profiles are owned by Supabase Auth. When auth is implemented, Supabase automatically provides the user ID via `auth.uid()`.
+
+2. **`day_number` is UNIQUE and CHECK-constrained** — prevents duplicate days and out-of-range values. This is the primary lookup key for the curriculum.
+
+3. **`module_id` uses `ON DELETE RESTRICT`** — prevents accidental deletion of a module that still has curriculum days. Must remove days first.
+
+4. **Content fields are typed, not JSON** — `subtopics` is `text[]`, `content` is `text`. This ensures data is always structured, queryable, and doesn't require parsing.
+
+5. **`current_day` on profiles** — tracks the user's progress through the journey (1–105). Updated by the application as the user completes days.
+
+6. **`journey_start_date` is a `date`** — not `timestamptz`, since the user picks a calendar date to start. Combined with `current_day`, the system can calculate which day the user is on.
+
+7. **`hours` is `numeric(5,1)`** — supports decimal hours (e.g. `12.5` hours) for accurate time tracking.
+
+8. **Indexes on common queries** — `day_number`, `module_id`, `week_number` are indexed for the most frequent access patterns (look up a day, filter by module, filter by week).
+
+9. **Permissive RLS** — all policies are wide-open for now. This is safe because the tables contain curriculum data (not user secrets). Policies will be tightened when auth is implemented.
+
+---
+
+## Running Migrations
+
+### Via Supabase CLI (local / CI)
+
+```bash
+supabase db push          # Apply to hosted Supabase project
+supabase migration up     # Apply locally (requires supabase start)
+```
+
+### Via Supabase Dashboard
+
+Copy the contents of `supabase/migrations/20260817000000_initial_schema.sql` into the SQL Editor at [app.supabase.com](https://app.supabase.com) → your project → SQL Editor → Run.
+
+---
+
+## Seeding Curriculum Data
+
+Curriculum data is **never hardcoded in React components**. It is loaded from the database via Supabase queries.
+
+To seed the 105-day curriculum:
+1. Create a seed script in `scripts/seed-curriculum/`
+2. The script inserts rows into `modules` and `curriculum_days`
+3. Run via `supabase db seed` or a dedicated script
+
+See `scripts/seed-curriculum/README.md` for details.
