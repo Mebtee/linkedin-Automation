@@ -31,3 +31,37 @@ export async function createClient() {
     },
   );
 }
+
+/**
+ * Supabase client for Route Handlers and Server Actions.
+ *
+ * Can set and clear cookies, which is required for:
+ * - Signing in (setting the session)
+ * - Signing out (clearing the session)
+ * - Refreshing expired tokens
+ */
+export async function createWriteClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    requirePublicEnv("supabaseUrl"),
+    requirePublicEnv("supabaseAnonKey"),
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options),
+            );
+          } catch {
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing sessions.
+          }
+        },
+      },
+    },
+  );
+}

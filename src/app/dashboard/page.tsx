@@ -2,12 +2,16 @@ import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { ensureProfile } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  // Ensure profile exists for the authenticated user
+  await ensureProfile();
+
   return (
     <>
       <PageHeader
