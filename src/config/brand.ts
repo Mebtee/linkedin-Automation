@@ -12,6 +12,7 @@ export type BrandConfig = {
   series: string;
   tagline: string;
   totalDays: number;
+  totalModules: number;
   timezone: string;
   colors: BrandColors;
   /** Branded image dimensions (generation is a later phase). */
@@ -29,6 +30,7 @@ export const brand = {
   series: "105 DAYS OF FULL-STACK DEVELOPMENT",
   tagline: "A personal AI-powered LinkedIn content automation system.",
   totalDays: 105,
+  totalModules: 8,
   timezone: "Africa/Addis_Ababa",
   colors: {
     navy: "#0F172A",

@@ -82,6 +82,47 @@ Each of the 105 individual learning days. Queryable by day number.
 
 ---
 
+### `daily_learning_entries` (Phase 2A)
+
+Daily learning journal entries — the source of truth for AI content generation.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Entry ID |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `day_number` | `integer` | NOT NULL, FK → `curriculum_days(day_number)` ON DELETE RESTRICT | Curriculum day |
+| `status` | `journal_status` | NOT NULL, default `'draft'` | Lifecycle status |
+| `what_i_learned` | `text` | nullable | Main concepts learned |
+| `what_i_practiced` | `text` | nullable | Skills practiced |
+| `what_i_built` | `text` | nullable | Projects or code created |
+| `challenge` | `text` | nullable | Hardest part of the day |
+| `how_i_solved_it` | `text` | nullable | How the challenge was overcome |
+| `key_takeaway` | `text` | nullable | Most important insight |
+| `tomorrow_focus` | `text` | nullable | What to focus on next |
+| `project_name` | `text` | nullable | Name of the project worked on |
+| `project_description` | `text` | nullable | Description of the project |
+| `code_reference` | `text` | nullable | Links or references to code |
+| `resources_used` | `text` | nullable | Tutorials, docs, articles used |
+| `confidence_level` | `integer` | nullable, CHECK `1–5` | Self-rated confidence |
+| `additional_notes` | `text` | nullable | Any other notes |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
+
+**Constraints:**
+- `(profile_id, day_number)` is **UNIQUE** — one entry per user per day
+- `day_number` FK references `curriculum_days(day_number)` — must be a valid day (1–105)
+- `profile_id` FK references `profiles(id)` — cascade delete when profile is removed
+- `confidence_level` must be between 1 and 5
+- `status` is a controlled enum: `draft`, `submitted`, `used`
+
+**Indexes:**
+- `idx_dle_profile_id` on `(profile_id)` — all entries for a user
+- `idx_dle_day_number` on `(day_number)` — all entries for a curriculum day
+- `idx_dle_profile_day` on `(profile_id, day_number)` — fast user+day lookup
+- `idx_dle_profile_status` on `(profile_id, status)` — filter by status
+
+---
+
 ## Relationships
 
 ```
@@ -91,18 +132,27 @@ auth.users (Supabase Auth)
   ▼
 profiles
   │
-  │ (implicit via module ordering)
-  ▼
-modules
+  ├── 1:N (implicit via module ordering)
+  │   ▼
+  │   modules
+  │     │
+  │     │ 1:N (module_id FK)
+  │     ▼
+  │   curriculum_days
   │
-  │ 1:N (module_id FK)
-  ▼
-curriculum_days
+  └── 1:N (profile_id FK)
+      ▼
+    daily_learning_entries
+      │
+      └── N:1 (day_number FK → curriculum_days)
 ```
 
 - A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
 - A **module** contains many **curriculum_days** (via `module_id` FK).
+- A **profile** has many **daily_learning_entries** (via `profile_id` FK).
+- A **daily_learning_entry** references one **curriculum_day** (via `day_number` FK).
 - `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
+- `ON DELETE RESTRICT` on `daily_learning_entries.day_number` prevents deleting a curriculum day that has journal entries.
 
 ---
 
@@ -113,6 +163,7 @@ curriculum_days
 | `profiles_set_updated_at` | `profiles` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `modules_set_updated_at` | `modules` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `curriculum_days_set_updated_at` | `curriculum_days` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `daily_learning_entries_set_updated_at` | `daily_learning_entries` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 
 The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
 
@@ -120,11 +171,12 @@ The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPD
 
 ## Row Level Security (RLS)
 
-All three tables have RLS **enabled** with restrictive policies (implemented in Phase 1F):
+All four tables have RLS **enabled** with restrictive policies:
 
 - **`profiles`**: Owner-only access (`auth.uid() = id`) for all operations.
 - **`modules`**: SELECT for authenticated users only; no write access for users.
 - **`curriculum_days`**: SELECT for authenticated users only; no write access for users.
+- **`daily_learning_entries`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **Anonymous users**: No access to any table.
 - **Service-role**: Bypasses all RLS (server-side only).
 
@@ -151,9 +203,16 @@ All three tables have RLS **enabled** with restrictive policies (implemented in 
 9. **Restrictive RLS** — policies enforce least-privilege access:
    - `profiles`: owner-only (auth.uid() = id) for all operations
    - `modules` / `curriculum_days`: SELECT for authenticated users only; no write access
+   - `daily_learning_entries`: owner-only (auth.uid() = profile_id) for all operations
    - Anonymous users have no access to any table
    - Service-role bypasses all RLS (server-side only)
    See [SECURITY.md](./SECURITY.md) for full policy documentation.
+
+10. **Journal references curriculum, doesn't duplicate** — `daily_learning_entries.day_number` FK references `curriculum_days(day_number)`. The journal stores the user's experience, not a copy of the curriculum.
+
+11. **Unique user+day constraint** — `(profile_id, day_number)` UNIQUE prevents accidental duplicate entries for the same curriculum day.
+
+12. **Controlled status enum** — `journal_status` (`draft` → `submitted` → `used`) provides a clear lifecycle without requiring a separate status table.
 
 ---
 
