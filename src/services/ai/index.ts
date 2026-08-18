@@ -1,5 +1,6 @@
 import type { TextGenerationProvider } from "@/types/ai";
 import { TemplateFallbackProvider } from "./providers/fallback";
+import { GeminiTextProvider } from "./providers/gemini";
 
 export type { TextGenerationProvider } from "@/types/ai";
 
@@ -7,6 +8,7 @@ export type { TextGenerationProvider } from "@/types/ai";
 
 const providers = new Map<string, () => TextGenerationProvider>([
   ["fallback", () => new TemplateFallbackProvider()],
+  ["gemini", () => new GeminiTextProvider()],
 ]);
 
 // ─── Provider Factory ───────────────────────────────────────────────────────

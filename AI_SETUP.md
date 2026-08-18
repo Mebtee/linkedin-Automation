@@ -1,4 +1,4 @@
-# AI Content Generation — Phase 3A Setup
+# AI Content Generation — Phase 3F Setup
 
 ## Architecture Overview
 
@@ -42,7 +42,7 @@ The factory reads `AI_TEXT_PROVIDER` from environment variables and returns the 
 | Provider | Status | Description |
 |----------|--------|-------------|
 | `fallback` | **Active** | Template-based, deterministic, no external AI |
-| Gemini | Planned | Will be added in a later phase |
+| `gemini` | **Active** | Gemini 2.0 Flash API, automatic fallback to template on failure |
 | OpenAI | Planned | Will be added in a later phase |
 | Anthropic | Planned | Will be added in a later phase |
 
@@ -58,6 +58,88 @@ The factory reads `AI_TEXT_PROVIDER` from environment variables and returns the 
 
 The fallback is intentionally simple. Real AI providers in later phases will produce more natural, engaging content.
 
+## Gemini Provider (Phase 3F)
+
+`GeminiTextProvider` generates LinkedIn posts using the Gemini 2.0 Flash API.
+
+### Architecture
+
+```
+PostGenerationInput
+    ↓
+GeminiTextProvider.generatePost(input)
+    ↓
+buildPrompt(input) → prompt
+    ↓
+callGeminiApi(prompt, apiKey) → GeminiResponse
+    ↓
+parseResponse(response) → GeminiJsonOutput
+    ↓
+validateGeneratedPostPayload(parsed) → ProviderResult
+    ↓
+success → ProviderResult { metadata.provider: "gemini" }
+failure → TemplateFallbackProvider → ProviderResult { metadata.provider: "fallback" }
+```
+
+### Gemini API Details
+
+- **Endpoint**: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`
+- **Model**: `gemini-3.6-flash`
+- **Auth**: `GEMINI_API_KEY` passed as `key` query parameter
+- **Timeout**: 30 seconds (AbortController)
+- **Response format**: `application/json` (via `generationConfig.responseMimeType`)
+- **Temperature**: 0.7
+
+### Prompt Structure
+
+The prompt sent to Gemini includes:
+
+1. **Context**: Day number, learning journey framing
+2. **Brand Voice**: Tone, avoid words, style rules
+3. **Content Rules**: Word count, hashtag limits, structural constraints
+4. **Curriculum Context**: Topic, module, content, subtopics, project/assessment info
+5. **Journal Entry**: All non-null journal fields
+6. **Post Format**: Selected format with description
+7. **Guidelines**: First-person voice, no mastery claims, no invented info
+8. **Output Schema**: Exact JSON structure required
+9. **Hashtag Rules**: Mandatory #105DaysOfCode, #FullStackDevelopment, plus 1–3 topic tags
+10. **Template Selection**: Guidance for image template selection
+
+### Error Mapping
+
+| Gemini HTTP Status | AI Error Code |
+|-------------------|---------------|
+| 400 | `INVALID_INPUT` |
+| 401, 403 | `AUTHENTICATION_ERROR` |
+| 429 | `RATE_LIMITED` |
+| 500, 502, 503 | `PROVIDER_UNAVAILABLE` |
+| Abort/timeout | `TIMEOUT` |
+| Network failure | `PROVIDER_UNAVAILABLE` |
+| Malformed JSON | `INVALID_OUTPUT` |
+| Invalid structure | `INVALID_OUTPUT` |
+
+### Fallback Behavior
+
+ANY Gemini failure (auth, network, timeout, invalid output, missing API key) automatically invokes `TemplateFallbackProvider`:
+
+- Fallback never throws because Gemini failed
+- Fallback preserves deterministic behavior
+- Fallback makes zero external calls
+- Metadata identifies the provider actually used (`"gemini"` or `"fallback"`)
+
+### Security
+
+- `GEMINI_API_KEY` read from `process.env` at call time (never stored on instance)
+- Never logged, never exposed to client code, never in error messages
+- Server-only via `server-only` import in env config
+- Not accessible via `NEXT_PUBLIC_*` variables
+
+### Response Validation
+
+Gemini output goes through the EXISTING validation layer (`validateGeneratedPostPayload`). Invalid output triggers fallback, never a raw error.
+
+## Gemini Prompt Structure
+
 ## Environment Configuration
 
 Add to `.env.local`:
@@ -65,16 +147,24 @@ Add to `.env.local`:
 ```bash
 # AI provider selection (default: "fallback")
 AI_TEXT_PROVIDER=fallback
+
+# Gemini API key (required when AI_TEXT_PROVIDER=gemini)
+GEMINI_API_KEY=your-gemini-api-key-here
 ```
 
-For external AI providers (later phases):
+Provider selection:
 
 ```bash
+# Use template fallback (default, no API key needed)
+AI_TEXT_PROVIDER=fallback
+
+# Use Gemini 2.0 Flash (requires GEMINI_API_KEY)
 AI_TEXT_PROVIDER=gemini
-AI_API_KEY=your-api-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
 ```
 
 **Never commit real API keys.** Use `.env.local` for secrets.
+**Never expose `GEMINI_API_KEY` to `NEXT_PUBLIC_*` variables.**
 
 ## Input Structure
 
@@ -332,6 +422,8 @@ src/
       index.ts               ← Provider factory
       providers/
         fallback.ts          ← TemplateFallbackProvider
+        gemini.ts            ← GeminiTextProvider (Gemini 2.0 Flash)
+        gemini.test.ts       ← Gemini provider tests (62 tests)
       validation.ts          ← Input/output validation
       input-builder.ts       ← Journal+curriculum → PostGenerationInput
       generation.ts          ← Post generation orchestrator
@@ -375,14 +467,21 @@ Run AI tests:
 pnpm test -- src/services/ai
 ```
 
-The fallback provider is fully testable without any API keys or network access.
+Run Gemini provider tests only:
+
+```bash
+pnpm test -- src/services/ai/providers/gemini.test.ts
+```
+
+Both providers are fully testable without any real API keys or network access. All fetch calls are mocked.
 
 ## What's NOT Implemented Yet
 
-Phase 3A–3C establish the foundation and generation workflow. These will be added in later phases:
+Phase 3A–3F establish the foundation, generation workflow, and Gemini integration. These will be added in later phases:
 
-- ❌ Gemini / OpenAI / Anthropic API integration
+- ✅ Gemini API integration (Phase 3F)
 - ✅ Image generation (Phase 3E — programmatic SVG)
+- ❌ OpenAI / Anthropic API integration
 - ❌ LinkedIn publishing
 - ❌ Post scheduling
 - ❌ Post editor UI
