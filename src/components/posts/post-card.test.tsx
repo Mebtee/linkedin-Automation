@@ -23,6 +23,9 @@ const mockPost = {
   model: "template-v1",
   tokens_used: null,
   content_hash: "abc123",
+  linkedin_post_id: null,
+  published_at: null,
+  publish_error: null,
   created_at: "2026-08-17T10:00:00Z",
   updated_at: "2026-08-17T10:00:00Z",
 };

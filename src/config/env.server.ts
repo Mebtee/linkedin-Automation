@@ -12,6 +12,9 @@ const SERVER_ENV_VARS = {
   supabaseServiceRoleKey: "SUPABASE_SERVICE_ROLE_KEY",
   aiTextProvider: "AI_TEXT_PROVIDER",
   geminiApiKey: "GEMINI_API_KEY",
+  linkedinClientId: "LINKEDIN_CLIENT_ID",
+  linkedinClientSecret: "LINKEDIN_CLIENT_SECRET",
+  linkedinOAuthStateSecret: "LINKEDIN_OAUTH_STATE_SECRET",
 } as const;
 
 export type ServerEnvKey = keyof typeof SERVER_ENV_VARS;
@@ -25,6 +28,9 @@ export const serverEnv = {
   supabaseServiceRoleKey: read(SERVER_ENV_VARS.supabaseServiceRoleKey),
   aiTextProvider: read(SERVER_ENV_VARS.aiTextProvider),
   geminiApiKey: read(SERVER_ENV_VARS.geminiApiKey),
+  linkedinClientId: read(SERVER_ENV_VARS.linkedinClientId),
+  linkedinClientSecret: read(SERVER_ENV_VARS.linkedinClientSecret),
+  linkedinOAuthStateSecret: read(SERVER_ENV_VARS.linkedinOAuthStateSecret),
 } as const;
 
 /**

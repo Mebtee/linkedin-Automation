@@ -369,9 +369,55 @@ export async function checkDuplicatePost(
   if (error) {
     throw new AppError("Failed to check for duplicate posts.", {
       code: "DATABASE_ERROR",
-      cause: error,
     });
   }
 
   return (count ?? 0) > 0;
+}
+
+// ─── Publish State ──────────────────────────────────────────────────────────
+
+export type PublishStateUpdate = {
+  readonly status?: GeneratedPostStatus;
+  readonly linkedin_post_id?: string | null;
+  readonly published_at?: string | null;
+  readonly publish_error?: string | null;
+};
+
+/**
+ * Updates the publish-related state on a generated post.
+ * Used after a publishing attempt (success or failure).
+ * Validates ownership.
+ */
+export async function updatePublishState(
+  postId: string,
+  state: PublishStateUpdate,
+): Promise<GeneratedPostRow> {
+  const supabase = await createClient();
+  const user = await requireAuth(supabase);
+
+  await loadOwnPost(supabase, user.id, postId);
+
+  const fieldsToUpdate: Record<string, unknown> = {};
+  if (state.status !== undefined) fieldsToUpdate.status = state.status;
+  if (state.linkedin_post_id !== undefined) fieldsToUpdate.linkedin_post_id = state.linkedin_post_id;
+  if (state.published_at !== undefined) fieldsToUpdate.published_at = state.published_at;
+  if (state.publish_error !== undefined) fieldsToUpdate.publish_error = state.publish_error;
+
+  const { data, error } = await supabase
+    .from("generated_posts")
+    .update(fieldsToUpdate)
+    .eq("id", postId)
+    .eq("profile_id", user.id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new AppError("Failed to update publish state.", {
+      code: "DATABASE_ERROR",
+      cause: error,
+    });
+  }
+
+  return data as GeneratedPostRow;
 }

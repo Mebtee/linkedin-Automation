@@ -27,6 +27,9 @@ export type GeneratedPostRow = {
   readonly model: string;
   readonly tokens_used: number | null;
   readonly content_hash: string;
+  readonly linkedin_post_id: string | null;
+  readonly published_at: string | null;
+  readonly publish_error: string | null;
   readonly created_at: string;
   readonly updated_at: string;
 };

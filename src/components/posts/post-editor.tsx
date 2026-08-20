@@ -11,7 +11,14 @@ import { PostActions } from "./post-actions";
 import { ImageSection } from "./image-section";
 import { ApprovePostDialog } from "./approve-post-dialog";
 import { DeletePostDialog } from "./delete-post-dialog";
-import { updatePost, approvePost, deletePost, regeneratePost } from "@/app/actions/generated-posts";
+import { PublishDialog } from "./publish-dialog";
+import {
+  updatePost,
+  approvePost,
+  deletePost,
+  regeneratePost,
+  publishPost,
+} from "@/app/actions/generated-posts";
 import { brand } from "@/config/brand";
 
 type PostEditorProps = {
@@ -38,12 +45,24 @@ export function PostEditor({ post }: PostEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [currentPost, setCurrentPost] = useState(post);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const showToast = useCallback(
+    (type: Toast["type"], message: string) => {
+      setToast({ type, message });
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+    },
+    [],
+  );
 
   // Cleanup toast timer
   useEffect(() => {
@@ -52,11 +71,44 @@ export function PostEditor({ post }: PostEditorProps) {
     };
   }, []);
 
-  const showToast = useCallback((type: Toast["type"], message: string) => {
-    setToast({ type, message });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+  // Check LinkedIn connection status
+  useEffect(() => {
+    let cancelled = false;
+    async function checkConnection() {
+      try {
+        const response = await fetch("/api/linkedin/status");
+        if (response.ok && !cancelled) {
+          const data = (await response.json()) as { status: string };
+          setIsConnected(data.status === "connected");
+        }
+      } catch {
+        if (!cancelled) setIsConnected(false);
+      }
+    }
+    void checkConnection();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Handle URL params for reauth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("linkedin");
+    if (result === "reauthorized") {
+      void handleReauthorized();
+    }
+
+    async function handleReauthorized() {
+      setIsConnected(true);
+      showToast("success", "LinkedIn reconnected with publishing permissions. You can now publish.");
+
+      // Clean up URL params
+      const url = new URL(window.location.href);
+      url.searchParams.delete("linkedin");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [showToast]);
 
   // Parse hashtags from raw textarea
   const parseHashtags = useCallback((raw: string): string[] => {
@@ -112,7 +164,16 @@ export function PostEditor({ post }: PostEditorProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, opening, body, takeaway, nextStep, hashtags, currentPost.id, showToast]);
+  }, [
+    isSaving,
+    opening,
+    body,
+    takeaway,
+    nextStep,
+    hashtags,
+    currentPost.id,
+    showToast,
+  ]);
 
   // ─── Approve ───────────────────────────────────────────────────────────
 
@@ -165,7 +226,10 @@ export function PostEditor({ post }: PostEditorProps) {
     setIsRegenerating(true);
 
     try {
-      const result = await regeneratePost(currentPost.day_number, currentPost.format);
+      const result = await regeneratePost(
+        currentPost.day_number,
+        currentPost.format,
+      );
       if (result.success) {
         // Update form with new content
         setOpening(result.post.opening);
@@ -185,7 +249,56 @@ export function PostEditor({ post }: PostEditorProps) {
     }
   }, [isRegenerating, currentPost.day_number, currentPost.format, showToast]);
 
-  const isEditable = currentPost.status === "draft" || currentPost.status === "failed";
+  // ─── Publish ───────────────────────────────────────────────────────────
+
+  const handlePublish = useCallback(async () => {
+    if (isPublishing) return;
+    setIsPublishing(true);
+    setPublishOpen(false);
+
+    try {
+      const result = await publishPost(currentPost.id);
+      if (result.success) {
+        setCurrentPost(result.post);
+        showToast("success", "Post published to LinkedIn!");
+      } else {
+        // Handle specific error codes
+        if (result.error.code === "INSUFFICIENT_SCOPE") {
+          showToast(
+            "error",
+            "LinkedIn needs additional permissions. Redirecting to reconnect...",
+          );
+          // Redirect to reauth after a brief delay
+          setTimeout(() => {
+            window.location.href = "/api/linkedin/auth?mode=reauth"; // eslint-disable-line @next/next/no-location-assign-relative-destination
+          }, 1500);
+          return;
+        }
+
+        if (result.error.code === "LINKEDIN_NOT_CONNECTED") {
+          setIsConnected(false);
+          showToast(
+            "error",
+            "Please connect your LinkedIn account first.",
+          );
+          return;
+        }
+
+        showToast("error", result.error.message);
+      }
+    } catch {
+      showToast("error", "An unexpected error occurred.");
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [isPublishing, currentPost.id, showToast]);
+
+  const handleConnectLinkedIn = useCallback(() => {
+    window.location.href = "/api/linkedin/auth"; // eslint-disable-line @next/next/no-location-assign-relative-destination
+  }, []);
+
+  const isEditable =
+    currentPost.status === "draft" || currentPost.status === "failed";
 
   return (
     <div className="space-y-6">
@@ -214,7 +327,10 @@ export function PostEditor({ post }: PostEditorProps) {
               Posts
             </Link>
             <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">/</span>
-            <span aria-current="page" className="text-zinc-900 dark:text-zinc-50">
+            <span
+              aria-current="page"
+              className="text-zinc-900 dark:text-zinc-50"
+            >
               Day {currentPost.day_number}
             </span>
           </nav>
@@ -222,11 +338,65 @@ export function PostEditor({ post }: PostEditorProps) {
             Post Editor
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Day {currentPost.day_number} / {brand.totalDays} · {currentPost.format}
+            Day {currentPost.day_number} / {brand.totalDays} ·{" "}
+            {currentPost.format}
           </p>
         </div>
         <PostStatusBadge status={currentPost.status} />
       </div>
+
+      {/* Published info */}
+      {currentPost.status === "published" && currentPost.linkedin_post_id && (
+        <div className="rounded-lg border border-[#2563EB]/20 bg-[#2563EB]/5 p-4">
+          <div className="flex items-center gap-2 text-sm text-[#2563EB]">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="font-medium">Published to LinkedIn</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            LinkedIn Post ID: {currentPost.linkedin_post_id}
+            {currentPost.published_at && (
+              <>
+                {" "}
+                · Published{" "}
+                {new Date(currentPost.published_at).toLocaleDateString(
+                  "en-US",
+                  {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  },
+                )}
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Publish error info */}
+      {currentPost.publish_error &&
+        currentPost.status !== "published" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+              Last publishing attempt failed
+            </p>
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+              {currentPost.publish_error}
+            </p>
+          </div>
+        )}
 
       {/* Main layout: Editor + Sidebar */}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -356,10 +526,14 @@ export function PostEditor({ post }: PostEditorProps) {
         isSaving={isSaving}
         isApproving={isApproving}
         isRegenerating={isRegenerating}
+        isPublishing={isPublishing}
+        isConnected={isConnected ?? false}
         onSave={handleSave}
         onApprove={() => setApproveOpen(true)}
         onRegenerate={handleRegenerate}
         onDelete={() => setDeleteOpen(true)}
+        onPublish={() => setPublishOpen(true)}
+        onConnectLinkedIn={handleConnectLinkedIn}
       />
 
       {/* Dialogs */}
@@ -374,6 +548,12 @@ export function PostEditor({ post }: PostEditorProps) {
         onConfirm={handleDelete}
         onCancel={() => setDeleteOpen(false)}
         isDeleting={isDeleting}
+      />
+      <PublishDialog
+        open={publishOpen}
+        onConfirm={handlePublish}
+        onCancel={() => setPublishOpen(false)}
+        isPublishing={isPublishing}
       />
     </div>
   );

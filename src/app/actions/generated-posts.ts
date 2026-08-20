@@ -6,8 +6,11 @@ import {
   updateGeneratedPost,
   changeGeneratedPostStatus,
   deleteGeneratedPost,
+  updatePublishState,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
+import { getAccessToken, publishToLinkedIn } from "@/services/linkedin";
+import { createWriteClient } from "@/lib/supabase/server";
 import type {
   GeneratedPostRow,
   GeneratedPostStatus,
@@ -90,6 +93,10 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
   }
 }
 
+export type PostPublishResult =
+  | { success: true; post: GeneratedPostRow }
+  | { success: false; error: { code: string; message: string } };
+
 export async function regeneratePost(
   dayNumber: number,
   format?: PostFormat,
@@ -100,6 +107,113 @@ export async function regeneratePost(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to regenerate post.";
     const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "GENERATION_FAILED";
+    return { success: false, error: { code, message } };
+  }
+}
+
+/**
+ * Publishes an approved post to LinkedIn.
+ *
+ * Flow:
+ * 1. Verify post is owned by the user and has status "approved"
+ * 2. Retrieve the LinkedIn access token (server-side only)
+ * 3. Check for w_member_social scope
+ * 4. Call LinkedIn UGC Posts API
+ * 5. Update the post with publish result
+ *
+ * Returns a specific error code "INSUFFICIENT_SCOPE" when the LinkedIn
+ * connection lacks w_member_social, so the UI can redirect to reauth.
+ * Returns "ALREADY_PUBLISHED" if the post has already been published.
+ */
+export async function publishPost(postId: string): Promise<PostPublishResult> {
+  try {
+    // 1. Load and verify the post
+    const post = await getGeneratedPost(postId);
+    if (!post) {
+      return {
+        success: false,
+        error: { code: "POST_NOT_FOUND", message: "Post not found." },
+      };
+    }
+
+    // 2. Only approved posts may be published
+    if (post.status !== "approved") {
+      return {
+        success: false,
+        error: {
+          code: "INVALID_STATUS",
+          message: "Only approved posts can be published.",
+        },
+      };
+    }
+
+    // 3. Get the LinkedIn access token (server-side only)
+    const supabase = await createWriteClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        success: false,
+        error: { code: "AUTH_REQUIRED", message: "Authentication required." },
+      };
+    }
+
+    const tokenData = await getAccessToken(supabase, user.id);
+
+    if (!tokenData) {
+      return {
+        success: false,
+        error: {
+          code: "LINKEDIN_NOT_CONNECTED",
+          message: "LinkedIn account is not connected. Please connect your LinkedIn account first.",
+        },
+      };
+    }
+
+    // 4. Check for w_member_social scope
+    if (!tokenData.hasPublishScope) {
+      return {
+        success: false,
+        error: {
+          code: "INSUFFICIENT_SCOPE",
+          message: "LinkedIn connection needs additional permissions to publish. Please reconnect with publishing permissions.",
+        },
+      };
+    }
+
+    // 5. Build the member URN and publish
+    const memberUrn = `urn:li:person:${user.id}`;
+    const result = await publishToLinkedIn(tokenData.token, post, memberUrn);
+
+    // 6. Update the post based on the result
+    if (result.success && result.linkedinPostId) {
+      const updatedPost = await updatePublishState(postId, {
+        status: "published",
+        linkedin_post_id: result.linkedinPostId,
+        published_at: new Date().toISOString(),
+        publish_error: null,
+      });
+      return { success: true, post: updatedPost };
+    }
+
+    // Publishing failed — store error, keep as approved
+    const errorMessage = result.error ?? "Unknown publishing error";
+    await updatePublishState(postId, {
+      publish_error: errorMessage,
+    });
+
+    return {
+      success: false,
+      error: {
+        code: "PUBLISH_FAILED",
+        message: `Publishing failed: ${errorMessage}`,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to publish post.";
+    const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "PUBLISH_FAILED";
     return { success: false, error: { code, message } };
   }
 }

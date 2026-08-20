@@ -7,10 +7,14 @@ type PostActionsProps = {
   isSaving: boolean;
   isApproving: boolean;
   isRegenerating: boolean;
+  isPublishing: boolean;
+  isConnected: boolean;
   onSave: () => void;
   onApprove: () => void;
   onRegenerate: () => void;
   onDelete: () => void;
+  onPublish: () => void;
+  onConnectLinkedIn: () => void;
 };
 
 export function PostActions({
@@ -18,13 +22,17 @@ export function PostActions({
   isSaving,
   isApproving,
   isRegenerating,
+  isPublishing,
+  isConnected,
   onSave,
   onApprove,
   onRegenerate,
   onDelete,
+  onPublish,
+  onConnectLinkedIn,
 }: PostActionsProps) {
   const isEditable = status === "draft" || status === "failed";
-  const isBusy = isSaving || isApproving || isRegenerating;
+  const isBusy = isSaving || isApproving || isRegenerating || isPublishing;
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -48,6 +56,47 @@ export function PostActions({
         >
           {isApproving ? "Approving..." : "Approve Post"}
         </button>
+      )}
+
+      {status === "approved" && (
+        <>
+          {isConnected ? (
+            <button
+              type="button"
+              onClick={onPublish}
+              disabled={isBusy}
+              className="rounded-lg bg-[#0a66c2] px-4 py-2 text-sm font-medium text-white hover:bg-[#004182] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isPublishing ? "Publishing..." : "Publish to LinkedIn"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onConnectLinkedIn}
+              className="rounded-lg border border-[#0a66c2] bg-[#0a66c2]/10 px-4 py-2 text-sm font-medium text-[#0a66c2] hover:bg-[#0a66c2]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB]"
+            >
+              Connect LinkedIn to Publish
+            </button>
+          )}
+        </>
+      )}
+
+      {status === "published" && (
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB]/10 px-4 py-2 text-sm font-medium text-[#2563EB]">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Published
+        </span>
       )}
 
       {isEditable && (

@@ -9,10 +9,20 @@ vi.mock("@/services/generated-posts", () => ({
   updateGeneratedPost: vi.fn(),
   changeGeneratedPostStatus: vi.fn(),
   deleteGeneratedPost: vi.fn(),
+  updatePublishState: vi.fn(),
 }));
 
 vi.mock("@/services/ai/generation", () => ({
   generatePostForDay: vi.fn(),
+}));
+
+vi.mock("@/services/linkedin", () => ({
+  getAccessToken: vi.fn(),
+  publishToLinkedIn: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createWriteClient: vi.fn(),
 }));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────
@@ -24,6 +34,7 @@ import {
   approvePost,
   deletePost,
   regeneratePost,
+  publishPost,
 } from "./generated-posts";
 import {
   getGeneratedPost,
@@ -31,8 +42,11 @@ import {
   updateGeneratedPost,
   changeGeneratedPostStatus,
   deleteGeneratedPost,
+  updatePublishState,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
+import { getAccessToken, publishToLinkedIn } from "@/services/linkedin";
+import { createWriteClient } from "@/lib/supabase/server";
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -57,6 +71,9 @@ const mockPost = {
   model: "template-v1",
   tokens_used: null,
   content_hash: "abc123",
+  linkedin_post_id: null,
+  published_at: null,
+  publish_error: null,
   created_at: "2026-08-17T10:00:00Z",
   updated_at: "2026-08-17T10:00:00Z",
 };
@@ -248,6 +265,127 @@ describe("Post Server Actions", () => {
       if (!result.success) {
         expect(result.error.code).toBe("GENERATION_DUPLICATE");
       }
+    });
+  });
+
+  // ─── publishPost ────────────────────────────────────────────────────────
+
+  describe("publishPost", () => {
+    const mockSupabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+        }),
+      },
+    };
+
+    beforeEach(() => {
+      (createWriteClient as Mock).mockResolvedValue(mockSupabase);
+    });
+
+    it("returns success when post is published", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: true,
+        linkedinPostId: "urn:li:share:12345",
+      });
+      const publishedPost = {
+        ...approvedPost,
+        status: "published",
+        linkedin_post_id: "urn:li:share:12345",
+      };
+      (updatePublishState as Mock).mockResolvedValue(publishedPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.post.status).toBe("published");
+      }
+    });
+
+    it("returns POST_NOT_FOUND when post does not exist", async () => {
+      (getGeneratedPost as Mock).mockResolvedValue(null);
+
+      const result = await publishPost("nonexistent");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("POST_NOT_FOUND");
+      }
+    });
+
+    it("returns INVALID_STATUS when post is not approved", async () => {
+      const draftPost = { ...mockPost, status: "draft" };
+      (getGeneratedPost as Mock).mockResolvedValue(draftPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("INVALID_STATUS");
+      }
+    });
+
+    it("returns LINKEDIN_NOT_CONNECTED when no token", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue(null);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("LINKEDIN_NOT_CONNECTED");
+      }
+    });
+
+    it("returns INSUFFICIENT_SCOPE when missing w_member_social", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: false,
+      });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("INSUFFICIENT_SCOPE");
+      }
+    });
+
+    it("returns PUBLISH_FAILED when LinkedIn API fails", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: false,
+        error: "INSUFFICIENT_SCOPE",
+      });
+      (updatePublishState as Mock).mockResolvedValue({
+        ...approvedPost,
+        publish_error: "INSUFFICIENT_SCOPE",
+      });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("PUBLISH_FAILED");
+      }
+      expect(updatePublishState).toHaveBeenCalledWith("post-1", {
+        publish_error: "INSUFFICIENT_SCOPE",
+      });
     });
   });
 });

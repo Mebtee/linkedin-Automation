@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/ui/empty-state";
+import { LinkedInConnectionCard } from "@/components/settings/linkedin-connection-card";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = {
@@ -14,10 +14,9 @@ export default function SettingsPage() {
         title="Settings"
         description="Manage integrations, branding and content preferences."
       />
-      <EmptyState
-        title="Settings coming soon"
-        description="Integration and preference settings will be implemented in a later phase."
-      />
+      <div className="space-y-6">
+        <LinkedInConnectionCard />
+      </div>
     </>
   );
 }

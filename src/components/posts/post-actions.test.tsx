@@ -8,10 +8,14 @@ const defaultProps = {
   isSaving: false,
   isApproving: false,
   isRegenerating: false,
+  isPublishing: false,
+  isConnected: false,
   onSave: vi.fn(),
   onApprove: vi.fn(),
   onRegenerate: vi.fn(),
   onDelete: vi.fn(),
+  onPublish: vi.fn(),
+  onConnectLinkedIn: vi.fn(),
 };
 
 describe("PostActions", () => {
@@ -43,11 +47,37 @@ describe("PostActions", () => {
     expect(screen.queryByText("Delete")).toBeNull();
   });
 
+  it("shows Published badge for published posts", () => {
+    render(<PostActions {...defaultProps} status="published" />);
+    expect(screen.getByText("Published")).toBeDefined();
+  });
+
   it("shows all actions for failed posts", () => {
     render(<PostActions {...defaultProps} status="failed" />);
     expect(screen.getByText("Save Draft")).toBeDefined();
     expect(screen.getByText("Regenerate")).toBeDefined();
     expect(screen.getByText("Delete")).toBeDefined();
+  });
+
+  it("shows Publish to LinkedIn button for approved posts when connected", () => {
+    render(
+      <PostActions {...defaultProps} status="approved" isConnected={true} />,
+    );
+    expect(screen.getByText("Publish to LinkedIn")).toBeDefined();
+  });
+
+  it("shows Connect LinkedIn button for approved posts when not connected", () => {
+    render(
+      <PostActions {...defaultProps} status="approved" isConnected={false} />,
+    );
+    expect(screen.getByText("Connect LinkedIn to Publish")).toBeDefined();
+  });
+
+  it("hides Approve Post for approved posts", () => {
+    render(
+      <PostActions {...defaultProps} status="approved" isConnected={true} />,
+    );
+    expect(screen.queryByText("Approve Post")).toBeNull();
   });
 
   it("calls onSave when save button clicked", async () => {
@@ -82,6 +112,36 @@ describe("PostActions", () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
+  it("calls onPublish when Publish to LinkedIn clicked", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn();
+    render(
+      <PostActions
+        {...defaultProps}
+        status="approved"
+        isConnected={true}
+        onPublish={onPublish}
+      />,
+    );
+    await user.click(screen.getByText("Publish to LinkedIn"));
+    expect(onPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onConnectLinkedIn when Connect LinkedIn clicked", async () => {
+    const user = userEvent.setup();
+    const onConnectLinkedIn = vi.fn();
+    render(
+      <PostActions
+        {...defaultProps}
+        status="approved"
+        isConnected={false}
+        onConnectLinkedIn={onConnectLinkedIn}
+      />,
+    );
+    await user.click(screen.getByText("Connect LinkedIn to Publish"));
+    expect(onConnectLinkedIn).toHaveBeenCalledTimes(1);
+  });
+
   it("disables buttons while saving", () => {
     render(<PostActions {...defaultProps} isSaving={true} />);
     const btn = screen.getByText("Saving...");
@@ -97,6 +157,19 @@ describe("PostActions", () => {
   it("disables buttons while regenerating", () => {
     render(<PostActions {...defaultProps} isRegenerating={true} />);
     const btn = screen.getByText("Regenerating...");
+    expect(btn).toHaveProperty("disabled", true);
+  });
+
+  it("shows Publishing... text while publishing", () => {
+    render(
+      <PostActions
+        {...defaultProps}
+        status="approved"
+        isConnected={true}
+        isPublishing={true}
+      />,
+    );
+    const btn = screen.getByText("Publishing...");
     expect(btn).toHaveProperty("disabled", true);
   });
 });
