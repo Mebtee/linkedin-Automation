@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 import {
   getConnectionStatus,
   getAccessToken,
+  buildMemberUrn,
   upsertConnection,
   deleteConnection,
 } from "@/services/linkedin/connection";
@@ -42,7 +43,7 @@ function createMockSupabase(overrides: MockOverrides = {}): SupabaseClient {
 }
 
 function createMockSupabaseForToken(
-  data: { access_token: string; expires_at: string | null; scope: string } | null,
+  data: { access_token: string; linkedin_sub?: string; expires_at: string | null; scope: string } | null,
 ): SupabaseClient {
   const chain = {
     select: vi.fn(),
@@ -101,9 +102,10 @@ describe("LinkedIn Connection Service", () => {
   });
 
   describe("getAccessToken", () => {
-    it("returns token and hasPublishScope=true when w_member_social present", async () => {
+    it("returns token, hasPublishScope=true, and linkedinSub when w_member_social present", async () => {
       const supabase = createMockSupabaseForToken({
         access_token: "my-secret-token",
+        linkedin_sub: "abc_sub",
         expires_at: new Date(Date.now() + 3600000).toISOString(),
         scope: "openid profile email w_member_social",
       });
@@ -111,11 +113,13 @@ describe("LinkedIn Connection Service", () => {
       expect(result).not.toBeNull();
       expect(result!.token).toBe("my-secret-token");
       expect(result!.hasPublishScope).toBe(true);
+      expect(result!.linkedinSub).toBe("abc_sub");
     });
 
     it("returns hasPublishScope=false when w_member_social absent", async () => {
       const supabase = createMockSupabaseForToken({
         access_token: "my-token",
+        linkedin_sub: "abc_sub",
         expires_at: new Date(Date.now() + 3600000).toISOString(),
         scope: "openid profile email",
       });
@@ -143,6 +147,7 @@ describe("LinkedIn Connection Service", () => {
     it("returns token when expires_at is null", async () => {
       const supabase = createMockSupabaseForToken({
         access_token: "token-no-expiry",
+        linkedin_sub: "abc_sub",
         expires_at: null,
         scope: "openid profile email w_member_social",
       });
@@ -157,11 +162,17 @@ describe("LinkedIn Connection Service", () => {
       expect(supabase.from).toHaveBeenCalledWith("linkedin_connections");
     });
 
-    it("selects only access_token, expires_at, and scope", async () => {
+    it("selects only access_token, linkedin_sub, expires_at, and scope", async () => {
       const supabase = createMockSupabaseForToken(null);
       await getAccessToken(supabase, "user-1");
       const chain = (supabase.from as Mock).mock.results[0]!.value;
-      expect(chain.select).toHaveBeenCalledWith("access_token, expires_at, scope");
+      expect(chain.select).toHaveBeenCalledWith("access_token, linkedin_sub, expires_at, scope");
+    });
+  });
+
+  describe("buildMemberUrn", () => {
+    it("builds the author URN from the OpenID Connect subject", () => {
+      expect(buildMemberUrn("abc_sub_123")).toBe("urn:li:person:abc_sub_123");
     });
   });
 

@@ -18,6 +18,7 @@ vi.mock("@/services/ai/generation", () => ({
 
 vi.mock("@/services/linkedin", () => ({
   getAccessToken: vi.fn(),
+  buildMemberUrn: (sub: string) => `urn:li:person:${sub}`,
   publishToLinkedIn: vi.fn(),
 }));
 
@@ -289,6 +290,7 @@ describe("Post Server Actions", () => {
       (getAccessToken as Mock).mockResolvedValue({
         token: "test-token",
         hasPublishScope: true,
+        linkedinSub: "li-sub-user",
       });
       (publishToLinkedIn as Mock).mockResolvedValue({
         success: true,
@@ -307,6 +309,11 @@ describe("Post Server Actions", () => {
       if (result.success) {
         expect(result.post.status).toBe("published");
       }
+      expect(publishToLinkedIn).toHaveBeenCalledWith(
+        "test-token",
+        approvedPost,
+        "urn:li:person:li-sub-user",
+      );
     });
 
     it("returns POST_NOT_FOUND when post does not exist", async () => {
@@ -367,6 +374,7 @@ describe("Post Server Actions", () => {
       (getAccessToken as Mock).mockResolvedValue({
         token: "test-token",
         hasPublishScope: true,
+        linkedinSub: "li-sub-user",
       });
       (publishToLinkedIn as Mock).mockResolvedValue({
         success: false,

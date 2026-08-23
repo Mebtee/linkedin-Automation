@@ -46,6 +46,13 @@ export async function getConnectionStatus(
 
 // ─── Access Token Retrieval ────────────────────────────────────────────────
 
+export type AccessTokenInfo = {
+  readonly token: string;
+  readonly hasPublishScope: boolean;
+  /** OpenID Connect subject (LinkedIn member id) used to build the author URN. */
+  readonly linkedinSub: string;
+};
+
 /**
  * Retrieves the raw LinkedIn access token for a user. Server-side only.
  * Never returns the token to client code.
@@ -56,10 +63,10 @@ export async function getConnectionStatus(
 export async function getAccessToken(
   supabase: SupabaseClient,
   profileId: string,
-): Promise<{ readonly token: string; readonly hasPublishScope: boolean } | null> {
+): Promise<AccessTokenInfo | null> {
   const { data } = await supabase
     .from("linkedin_connections")
-    .select("access_token, expires_at, scope")
+    .select("access_token, linkedin_sub, expires_at, scope")
     .eq("profile_id", profileId)
     .single();
 
@@ -72,7 +79,16 @@ export async function getAccessToken(
 
   const hasPublishScope = data.scope.includes("w_member_social");
 
-  return { token: data.access_token, hasPublishScope };
+  return { token: data.access_token, hasPublishScope, linkedinSub: data.linkedin_sub };
+}
+
+/**
+ * Builds the LinkedIn member URN (`urn:li:person:<sub>`) required as the
+ * post `author`. Must come from the stored OpenID Connect subject — using an
+ * internal UUID would be rejected by the API.
+ */
+export function buildMemberUrn(linkedinSub: string): string {
+  return `urn:li:person:${linkedinSub}`;
 }
 
 // ─── Upsert ─────────────────────────────────────────────────────────────────

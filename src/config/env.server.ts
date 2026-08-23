@@ -15,6 +15,7 @@ const SERVER_ENV_VARS = {
   linkedinClientId: "LINKEDIN_CLIENT_ID",
   linkedinClientSecret: "LINKEDIN_CLIENT_SECRET",
   linkedinOAuthStateSecret: "LINKEDIN_OAUTH_STATE_SECRET",
+  schedulerSecret: "SCHEDULER_SECRET",
 } as const;
 
 export type ServerEnvKey = keyof typeof SERVER_ENV_VARS;
@@ -31,6 +32,7 @@ export const serverEnv = {
   linkedinClientId: read(SERVER_ENV_VARS.linkedinClientId),
   linkedinClientSecret: read(SERVER_ENV_VARS.linkedinClientSecret),
   linkedinOAuthStateSecret: read(SERVER_ENV_VARS.linkedinOAuthStateSecret),
+  schedulerSecret: read(SERVER_ENV_VARS.schedulerSecret),
 } as const;
 
 /**

@@ -1,0 +1,50 @@
+name: Scheduled Post Publisher
+
+# Phase 3G-C — automated publishing via GitHub Actions cron ($0-cost).
+#
+# NOTE: GitHub Actions scheduled workflows are NOT real-time. Runs can be
+# delayed by several minutes (and occasionally longer during peak load).
+# The publisher endpoint processes every post whose scheduled_at is due,
+# so delays never lose a post — they only postpone publication slightly.
+on:
+  schedule:
+    # Every 5 minutes. Expect real-world delays of up to ~15 minutes.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # Allow manual trigger from the Actions tab
+
+# Never run two publisher invocations concurrently — redundant but free
+# insurance against overlapping runs racing on the same due posts.
+concurrency:
+  group: publish-scheduled
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger publisher endpoint
+        env:
+          SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          set -euo pipefail
+
+          # Fail loudly on network errors or non-2xx responses.
+          http_code=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${SCHEDULER_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${APP_URL}/api/scheduler/publish")
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Publisher endpoint returned HTTP ${http_code}"
+            cat response.json
+            exit 1
+          fi
+
+          echo "Publisher completed successfully"
+          cat response.json
+
+      # The secret is used only inside this step's environment and is never
+      # printed, stored in artifacts, or added to job outputs.

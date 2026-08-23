@@ -10,8 +10,10 @@ export {
 export {
   getConnectionStatus,
   getAccessToken,
+  buildMemberUrn,
   upsertConnection,
   deleteConnection,
+  type AccessTokenInfo,
   type LinkedInConnectionInfo,
   type UpsertConnectionInput,
 } from "./connection";

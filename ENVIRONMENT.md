@@ -19,15 +19,30 @@ its scope, and when it becomes required. It is the source of truth for the
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | When Supabase is integrated | Supabase anon/public key (safe for the browser under RLS). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only | When privileged server ops are added | Supabase service-role key. Bypasses RLS; server-only, never exposed to the client. |
 
-## Reserved (future phases, not yet configured)
+## Phase 3G — LinkedIn & scheduling
 
-| Variable | Scope | When |
-| --- | --- | --- |
-| `LINKEDIN_CLIENT_ID` | Server-only | LinkedIn publishing phase |
-| `LINKEDIN_CLIENT_SECRET` | Server-only | LinkedIn publishing phase |
-| `LINKEDIN_ACCESS_TOKEN` | Server-only | LinkedIn publishing phase |
-| `AI_API_KEY` | Server-only | AI generation phase |
-| `AUTOMATION_SECRET` | Server-only | Automation phase |
+| Variable | Scope | Required | Description |
+| --- | --- | --- | --- |
+| `LINKEDIN_CLIENT_ID` | Server-only | LinkedIn connect | LinkedIn app client ID. |
+| `LINKEDIN_CLIENT_SECRET` | Server-only | LinkedIn connect | LinkedIn app client secret. |
+| `LINKEDIN_OAUTH_STATE_SECRET` | Server-only | LinkedIn connect | HMAC secret signing OAuth state tokens (CSRF). |
+| `SCHEDULER_SECRET` | Server-only | Scheduled publishing | Bearer token authenticating the GitHub Actions cron against `/api/scheduler/publish`. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Never sent to browsers, never logged. |
+
+### GitHub Actions cron setup (Phase 3G-C)
+
+The workflow `.github/workflows/publish-scheduled.yml` runs every 5 minutes and
+POSTs to `${APP_URL}/api/scheduler/publish` with `Authorization: Bearer <SCHEDULER_SECRET>`.
+
+Configure these **repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `SCHEDULER_SECRET` | Same value as the server's `SCHEDULER_SECRET` env var. |
+| `APP_URL` | The deployed app's public base URL (e.g. `https://your-app.vercel.app`). |
+
+GitHub Actions scheduled workflows are **not real-time**: expect publication
+delays of several minutes. Posts are never lost by delays — the publisher
+processes everything whose `scheduled_at` has passed.
 
 ## How configuration is read
 

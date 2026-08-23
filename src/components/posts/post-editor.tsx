@@ -9,6 +9,7 @@ import { PostPreview } from "./post-preview";
 import { PostMetadata } from "./post-metadata";
 import { PostActions } from "./post-actions";
 import { ImageSection } from "./image-section";
+import { SchedulePanel } from "./schedule-panel";
 import { ApprovePostDialog } from "./approve-post-dialog";
 import { DeletePostDialog } from "./delete-post-dialog";
 import { PublishDialog } from "./publish-dialog";
@@ -19,7 +20,14 @@ import {
   regeneratePost,
   publishPost,
 } from "@/app/actions/generated-posts";
+import {
+  schedulePostAction,
+  cancelScheduleAction,
+  reschedulePostAction,
+  getActiveScheduleAction,
+} from "@/app/actions/schedules";
 import { brand } from "@/config/brand";
+import type { ScheduledPostRow } from "@/types/schedule";
 
 type PostEditorProps = {
   post: GeneratedPostRow;
@@ -52,6 +60,10 @@ export function PostEditor({ post }: PostEditorProps) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [currentPost, setCurrentPost] = useState(post);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [activeSchedule, setActiveSchedule] = useState<ScheduledPostRow | null>(
+    null,
+  );
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -109,6 +121,25 @@ export function PostEditor({ post }: PostEditorProps) {
       window.history.replaceState({}, "", url.toString());
     }
   }, [showToast]);
+
+  // Check for active schedule on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSchedule() {
+      try {
+        const result = await getActiveScheduleAction(currentPost.id);
+        if (result.success && !cancelled) {
+          setActiveSchedule(result.schedule);
+        }
+      } catch {
+        // Silently ignore
+      }
+    }
+    void checkSchedule();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPost.id]);
 
   // Parse hashtags from raw textarea
   const parseHashtags = useCallback((raw: string): string[] => {
@@ -260,6 +291,7 @@ export function PostEditor({ post }: PostEditorProps) {
       const result = await publishPost(currentPost.id);
       if (result.success) {
         setCurrentPost(result.post);
+        setActiveSchedule(null);
         showToast("success", "Post published to LinkedIn!");
       } else {
         // Handle specific error codes
@@ -296,6 +328,78 @@ export function PostEditor({ post }: PostEditorProps) {
   const handleConnectLinkedIn = useCallback(() => {
     window.location.href = "/api/linkedin/auth"; // eslint-disable-line @next/next/no-location-assign-relative-destination
   }, []);
+
+  // ─── Schedule ───────────────────────────────────────────────────────────
+
+  const handleSchedule = useCallback(
+    async (scheduledAt: string) => {
+      setIsScheduling(true);
+      try {
+        const result = await schedulePostAction(currentPost.id, scheduledAt);
+        if (result.success) {
+          setActiveSchedule(result.schedule);
+          showToast("success", "Post scheduled successfully.");
+        } else {
+          showToast("error", result.error.message);
+          throw new Error(result.error.message);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message) {
+          showToast("error", err.message);
+        }
+        throw err;
+      } finally {
+        setIsScheduling(false);
+      }
+    },
+    [currentPost.id, showToast],
+  );
+
+  const handleCancelSchedule = useCallback(async () => {
+    if (!activeSchedule) return;
+    setIsScheduling(true);
+    try {
+      const result = await cancelScheduleAction(activeSchedule.id);
+      if (result.success) {
+        setActiveSchedule(null);
+        showToast("success", "Schedule cancelled.");
+      } else {
+        showToast("error", result.error.message);
+        throw new Error(result.error.message);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        showToast("error", err.message);
+      }
+      throw err;
+    } finally {
+      setIsScheduling(false);
+    }
+  }, [activeSchedule, showToast]);
+
+  const handleReschedule = useCallback(
+    async (scheduleId: string, scheduledAt: string) => {
+      setIsScheduling(true);
+      try {
+        const result = await reschedulePostAction(scheduleId, scheduledAt);
+        if (result.success) {
+          setActiveSchedule(result.schedule);
+          showToast("success", "Post rescheduled successfully.");
+        } else {
+          showToast("error", result.error.message);
+          throw new Error(result.error.message);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message) {
+          showToast("error", err.message);
+        }
+        throw err;
+      } finally {
+        setIsScheduling(false);
+      }
+    },
+    [showToast],
+  );
 
   const isEditable =
     currentPost.status === "draft" || currentPost.status === "failed";
@@ -517,6 +621,17 @@ export function PostEditor({ post }: PostEditorProps) {
           />
           <ImageSection post={currentPost} />
           <PostMetadata post={currentPost} />
+          {currentPost.status === "approved" && (
+            <SchedulePanel
+              existingSchedule={activeSchedule}
+              isConnected={isConnected ?? false}
+              isPublishing={isScheduling || isPublishing}
+              onSchedule={handleSchedule}
+              onCancel={handleCancelSchedule}
+              onReschedule={handleReschedule}
+              onConnectLinkedIn={handleConnectLinkedIn}
+            />
+          )}
         </div>
       </div>
 

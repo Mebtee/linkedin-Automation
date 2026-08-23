@@ -9,7 +9,7 @@ import {
   updatePublishState,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
-import { getAccessToken, publishToLinkedIn } from "@/services/linkedin";
+import { getAccessToken, buildMemberUrn, publishToLinkedIn } from "@/services/linkedin";
 import { createWriteClient } from "@/lib/supabase/server";
 import type {
   GeneratedPostRow,
@@ -184,7 +184,7 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
     }
 
     // 5. Build the member URN and publish
-    const memberUrn = `urn:li:person:${user.id}`;
+    const memberUrn = buildMemberUrn(tokenData.linkedinSub);
     const result = await publishToLinkedIn(tokenData.token, post, memberUrn);
 
     // 6. Update the post based on the result
