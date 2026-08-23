@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { requirePublicEnv } from "@/config/env";
 import { createWriteClient } from "@/lib/supabase/server";
 
 export async function login(formData: FormData) {
@@ -32,6 +33,10 @@ export async function signup(formData: FormData) {
     email,
     password,
     options: {
+      // Send the confirmation link back to THIS app regardless of the
+      // Supabase "Site URL" setting — without this, the email link follows
+      // whatever origin is configured in the Supabase dashboard.
+      emailRedirectTo: `${requirePublicEnv("appUrl")}/auth/callback`,
       data: {
         timezone: "Africa/Addis_Ababa",
       },

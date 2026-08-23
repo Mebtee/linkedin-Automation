@@ -27,7 +27,7 @@ export default function LoginPage() {
         {error && (
           <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
             {error === "auth_callback_error"
-              ? "Authentication failed. Please try again."
+              ? "Authentication link was invalid or already used. Open the email link in the same browser you signed up from, then try again."
               : error}
           </div>
         )}
