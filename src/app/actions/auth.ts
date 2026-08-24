@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { requirePublicEnv } from "@/config/env";
+import { ensureProfile } from "@/lib/auth";
 import { createWriteClient } from "@/lib/supabase/server";
 
 export async function login(formData: FormData) {
@@ -19,6 +20,10 @@ export async function login(formData: FormData) {
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
+
+  // Password logins skip /auth/callback, so the profile row must be
+  // ensured here as well (idempotent).
+  await ensureProfile();
 
   redirect("/dashboard");
 }
@@ -51,6 +56,7 @@ export async function signup(formData: FormData) {
   // a session immediately — go straight to the dashboard. Otherwise tell the
   // user to check their inbox for the confirmation link.
   if (data.session) {
+    await ensureProfile();
     redirect("/dashboard");
   }
 
