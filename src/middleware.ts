@@ -6,6 +6,7 @@ const protectedRoutes = [
   "/dashboard",
   "/curriculum",
   "/journal",
+  "/course-materials",
   "/posts",
   "/schedule",
   "/settings",

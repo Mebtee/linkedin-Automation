@@ -36,6 +36,12 @@ its scope, and when it becomes required. It is the source of truth for the
 | `AI_IMAGE_PROVIDER` | Server-only | No (default) | Image provider name; only `branded-svg` exists and is the default. |
 | `GEMINI_API_KEY` | Server-only | When `AI_TEXT_PROVIDER=gemini` | Google AI Studio API key for Gemini. Server-side only; never logged, never exposed in responses. |
 
+## Phase 3I — Course PDF ingestion
+
+| Variable | Scope | Required | Description |
+| --- | --- | --- | --- |
+| `MAX_PDF_SIZE_MB` | Server-only | No (default `10`) | Maximum accepted course-PDF upload size. Clamped to 1–100 MB; invalid values fall back to the default. |
+
 ## Production deployment (Phase 3H)
 
 Deploying to Vercel (or any Next.js host) requires all variables from the

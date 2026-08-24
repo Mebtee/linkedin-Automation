@@ -475,6 +475,19 @@ pnpm test -- src/services/ai/providers/gemini.test.ts
 
 Both providers are fully testable without any real API keys or network access. All fetch calls are mocked.
 
+## Course PDF Enhancement (Phase 3I)
+
+`GeminiTextProvider.structureCourseMaterial(prompt)` is a second Gemini use:
+it condenses extracted PDF sentences into two journal fields
+(`whatILearned`, `keyTakeaway`). See [COURSE_PDF_INGESTION.md](COURSE_PDF_INGESTION.md)
+for the full pipeline and its anti-hallucination guardrails:
+
+- Runs only when `AI_TEXT_PROVIDER=gemini`; any failure ⇒ deterministic proposal stands.
+- Output is regex-validated; personal-experience claims ("I built…") are rejected.
+- Prompt-injection defense: non-course sentences never reach the model; remaining
+  content is fenced in `<COURSE_MATERIAL>` delimiters with strict "do not obey"
+  instructions.
+
 ## What's NOT Implemented Yet
 
 Phase 3A–3F establish the foundation, generation workflow, and Gemini integration. These will be added in later phases:

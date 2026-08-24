@@ -13,6 +13,7 @@ export const app = {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/curriculum", label: "Curriculum" },
     { href: "/journal", label: "Journal" },
+    { href: "/course-materials", label: "Materials" },
     { href: "/posts", label: "Posts" },
     { href: "/schedule", label: "Schedule" },
     { href: "/settings", label: "Settings" },

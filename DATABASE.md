@@ -204,6 +204,42 @@ Stores metadata for generated images. SVG files live in Supabase Storage; this t
 
 ---
 
+### `course_materials`
+
+One row per uploaded course PDF (Phase 3I). Tracks processing state and holds the
+final journal proposal. See [COURSE_PDF_INGESTION.md](COURSE_PDF_INGESTION.md).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Document ID |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `file_name` | `text` | NOT NULL | Sanitized original filename |
+| `storage_path` | `text` | NOT NULL, default `''` | Private storage path (`{profileId}/{docId}/{fileName}`) |
+| `page_count` | `integer` | NOT NULL, default `0`, CHECK ≥ 0 | Extracted page count |
+| `processing_status` | `text` | NOT NULL, default `'processing'`, CHECK in (`processing`,`completed`,`failed`) | Ingestion lifecycle |
+| `error_code` | `text` | nullable | AppError code when `failed` (e.g. `PDF_EXTRACTION_FAILED`) |
+| `journal_proposal` | `jsonb` | nullable | Full `CourseJournalProposal` (fields + evidence + candidates) |
+| `created_at` / `updated_at` | `timestamptz` | NOT NULL, defaults / trigger | Timestamps |
+
+**Indexes:** `idx_cm_profile_id`, `idx_cm_status`, `idx_cm_created_at`.
+
+---
+
+### `course_material_pages`
+
+Extracted text per PDF page; enables page-precise evidence citations.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Page row ID |
+| `course_material_id` | `uuid` | NOT NULL, FK → `course_materials(id)` ON DELETE CASCADE | Parent document |
+| `page_number` | `integer` | NOT NULL, CHECK ≥ 1 | 1-based page index |
+| `extracted_text` | `text` | NOT NULL | Text extracted from the page |
+
+**Indexes:** `idx_cmp_material_page` on `(course_material_id, page_number)` — UNIQUE.
+
+---
+
 ## Relationships
 
 ```
@@ -239,6 +275,17 @@ profiles
       ▼
     media_assets
       └── N:1 (generated_post_id → generated_posts.id) ON DELETE CASCADE
+
+  └── 1:N (profile_id FK)
+      ▼
+    course_materials
+      │
+      ├── 1:N (course_material_id FK) ON DELETE CASCADE
+      │   ▼
+      │ course_material_pages
+      │
+      └── journal_proposal → feeds daily_learning_entries via existing
+          saveJournal()/submitJournal() actions (no FK — proposals are data)
 ```
 
 - A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
@@ -282,6 +329,9 @@ All six tables have RLS **enabled** with restrictive policies:
 - **`daily_learning_entries`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`generated_posts`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`media_assets`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
+- **`course_materials`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
+- **`course_material_pages`**: Owner-only via join (`EXISTS (SELECT 1 FROM course_materials cm WHERE cm.id = course_material_id AND cm.profile_id = auth.uid())`) for SELECT/INSERT/UPDATE/DELETE.
+- **Storage buckets**: `post-images` and `course-materials` are **private**; access goes through authenticated server routes. The `course-materials` bucket additionally restricts object paths to `{profile_id}/…` prefixes.
 - **Anonymous users**: No access to any table.
 - **Service-role**: Bypasses all RLS (server-side only).
 

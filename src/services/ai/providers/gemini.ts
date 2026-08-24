@@ -69,6 +69,31 @@ interface GeminiJsonOutput {
 export class GeminiTextProvider implements TextGenerationProvider {
   private readonly fallback = new TemplateFallbackProvider();
 
+  // ─── Course Material Structuring (Phase 3I) ─────────────────────────────
+  //
+  // Optional capability used by the course-PDF ingestion workflow. Reuses the
+  // same API plumbing as generatePost — no second provider architecture.
+  // Returns a parsed JSON object on success, or null when the provider is
+  // unavailable/misconfigured — callers must degrade to deterministic logic.
+
+  async structureCourseMaterial(
+    prompt: string,
+  ): Promise<Record<string, unknown> | null> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey.trim() === "") return null;
+
+    try {
+      const rawResponse = await this.callGeminiApi(prompt, apiKey);
+      const parsed = this.parseResponse(rawResponse);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as unknown as Record<string, unknown>)
+        : null;
+    } catch {
+      // Any failure degrades to the deterministic path — never throws.
+      return null;
+    }
+  }
+
   async generatePost(input: PostGenerationInput): Promise<ProviderResult> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey.trim() === "") {
