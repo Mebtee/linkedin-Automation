@@ -28,6 +28,27 @@ its scope, and when it becomes required. It is the source of truth for the
 | `LINKEDIN_OAUTH_STATE_SECRET` | Server-only | LinkedIn connect | HMAC secret signing OAuth state tokens (CSRF). |
 | `SCHEDULER_SECRET` | Server-only | Scheduled publishing | Bearer token authenticating the GitHub Actions cron against `/api/scheduler/publish`. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Never sent to browsers, never logged. |
 
+## Phase 3A/3F — AI generation
+
+| Variable | Scope | Required | Description |
+| --- | --- | --- | --- |
+| `AI_TEXT_PROVIDER` | Server-only | For real AI generation | `gemini` enables real text generation with automatic fallback to the template provider on any failure. Unset/empty defaults to the template provider ($0 cost). |
+| `AI_IMAGE_PROVIDER` | Server-only | No (default) | Image provider name; only `branded-svg` exists and is the default. |
+| `GEMINI_API_KEY` | Server-only | When `AI_TEXT_PROVIDER=gemini` | Google AI Studio API key for Gemini. Server-side only; never logged, never exposed in responses. |
+
+## Production deployment (Phase 3H)
+
+Deploying to Vercel (or any Next.js host) requires all variables from the
+tables above configured in the hosting provider's environment settings — by
+name:
+
+- Public: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Server-only: `SUPABASE_SERVICE_ROLE_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_OAUTH_STATE_SECRET`, `SCHEDULER_SECRET`, `AI_TEXT_PROVIDER`, `GEMINI_API_KEY`
+
+In production, `NEXT_PUBLIC_APP_URL` must be the deployed HTTPS origin (e.g.
+`https://your-app.vercel.app`) — it drives OAuth redirects and email links.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full step-by-step procedure.
+
 ### GitHub Actions cron setup (Phase 3G-C)
 
 The workflow `.github/workflows/publish-scheduled.yml` runs every 5 minutes and

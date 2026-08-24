@@ -208,9 +208,9 @@ export async function generatePostImage(
     });
   }
 
-  // Get public URL
-  const { data: urlData } = supabase.storage.from("post-images").getPublicUrl(storagePath);
-  const storageUrl = urlData.publicUrl;
+  // The bucket is private — images are served to their owner through the
+  // authenticated route, which authorizes via RLS-checked media_assets.
+  const storageUrl = `/api/media/${postId}/image`;
 
   // Persist metadata
   const altText = generateAltText(post.day_number, curriculumDay.topic);

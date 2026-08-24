@@ -171,12 +171,15 @@ If `BrandedSvgProvider` throws or produces unsafe SVG:
 
 ## Storage
 
-- Bucket: `post-images` (public — images are for LinkedIn posts that will be published)
+- Bucket: `post-images` (**private** since Phase 3H — publishing is text-only, so world-readable images served no purpose)
 - Path: `{profile_id}/{post_id}/image.svg`
 - Server-side uploads only (via `createClient()` with auth)
-- `getPublicUrl()` generates permanent URLs (correct for public buckets)
+- Images are served to their owner through the authenticated route
+  `/api/media/[postId]/image` (session-authenticated, RLS-checked); the
+  `media_assets.storage_url` column stores this route path
 - RLS on `media_assets` table controls metadata access (owner-only)
-- Storage policies: anyone can read, only owner can upload/delete to their path prefix
+- Storage policies: only the owner can read/upload/delete within their
+  `{auth.uid()}` path prefix — another user's files are inaccessible
 
 ## Regeneration
 

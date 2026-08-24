@@ -96,8 +96,8 @@ export function ImageSection({ post }: ImageSectionProps) {
 
   const handleDownload = useCallback(() => {
     if (!asset) return;
-    // Fetch the SVG content and trigger a download
-    fetch(asset.storage_url)
+    // Fetch the SVG content via the authenticated image route and trigger a download
+    fetch(`/api/media/${post.id}/image`)
       .then((res) => res.text())
       .then((svg) => {
         const blob = new Blob([svg], { type: "image/svg+xml" });
@@ -113,7 +113,7 @@ export function ImageSection({ post }: ImageSectionProps) {
       .catch(() => {
         showToast("error", "Failed to download image.");
       });
-  }, [asset, post.day_number, showToast]);
+  }, [asset, post.day_number, post.id, showToast]);
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
@@ -147,7 +147,7 @@ export function ImageSection({ post }: ImageSectionProps) {
         <div className="mt-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={asset.storage_url}
+            src={`/api/media/${post.id}/image`}
             alt={asset.alt_text}
             className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700"
             style={{ aspectRatio: "1 / 1", objectFit: "contain", background: "#F8FAFC" }}
