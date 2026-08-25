@@ -204,6 +204,57 @@ Stores metadata for generated images. SVG files live in Supabase Storage; this t
 
 ---
 
+### `linkedin_connections`
+
+One row per authenticated user who has connected their LinkedIn account via OAuth. Stores access tokens server-side only — never exposed to the browser.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Row ID |
+| `profile_id` | `uuid` | NOT NULL, **UNIQUE**, FK → `profiles(id)` ON DELETE CASCADE | One active connection per user |
+| `linkedin_sub` | `text` | NOT NULL | OpenID Connect subject identifier from LinkedIn |
+| `access_token` | `text` | NOT NULL | OAuth 2.0 access token — server-side only |
+| `token_type` | `text` | NOT NULL, default `'bearer'` | Token type |
+| `expires_at` | `timestamptz` | nullable | Token expiration timestamp |
+| `scope` | `text` | NOT NULL, default `'openid profile email'` | Granted OAuth scopes |
+| `linkedin_name` | `text` | nullable | Display name from LinkedIn profile |
+| `linkedin_email` | `text` | nullable | Primary email from LinkedIn profile |
+| `created_at` / `updated_at` | `timestamptz` | NOT NULL, defaults / trigger | Timestamps |
+
+**Constraints:**
+- `profile_id` is **UNIQUE** — at most one active LinkedIn connection per user.
+
+**Indexes:** `idx_lc_profile_id`, `idx_lc_linkedin_sub`.
+
+---
+
+### `scheduled_posts`
+
+Tracks scheduled future LinkedIn publications. Lifecycle is independent from post content — a post can be edited/republished after initial scheduling.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Row ID |
+| `post_id` | `uuid` | NOT NULL, FK → `generated_posts(id)` ON DELETE CASCADE | Post to publish |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `scheduled_at` | `timestamptz` | NOT NULL | Target publication time (UTC) |
+| `status` | `schedule_status` | NOT NULL, default `'scheduled'` | See lifecycle below |
+| `published_at` | `timestamptz` | nullable | Actual publication timestamp |
+| `linkedin_post_id` | `text` | nullable | LinkedIn post ID after successful publish |
+| `last_error` | `text` | nullable | Error message from last failed attempt |
+| `attempt_count` | `integer` | NOT NULL, default `0` | Publishing attempts made |
+| `created_at` / `updated_at` | `timestamptz` | NOT NULL, defaults / trigger | Timestamps |
+
+**Status lifecycle** (`schedule_status` enum):
+- `scheduled` → `publishing` → `published` | `failed`
+- `scheduled` → `cancelled`
+
+**Partial unique index:** `idx_sp_one_active_per_post` — at most one row with `status = 'scheduled'` per `post_id`.
+
+**Indexes:** `idx_sp_status_scheduled_at` (partial, for cron publisher), `idx_sp_profile_id`, `idx_sp_post_id`.
+
+---
+
 ### `course_materials`
 
 One row per uploaded course PDF (Phase 3I). Tracks processing state and holds the
@@ -269,13 +320,23 @@ profiles
   │   │
   │   ├── N:1 (journal_entry_id → daily_learning_entries.id) ON DELETE CASCADE
   │   ├── N:1 (day_number → curriculum_days.day_number) ON DELETE RESTRICT
-  │   └── 1:0..1 (generated_post_id → media_assets)
+  │   ├── 1:0..1 (generated_post_id → media_assets)
+  │   └── 1:0..N (post_id → scheduled_posts)
   │
-  └── 1:N (profile_id FK)
-      ▼
-    media_assets
-      └── N:1 (generated_post_id → generated_posts.id) ON DELETE CASCADE
-
+  ├── 1:N (profile_id FK)
+  │   ▼
+  │ linkedin_connections
+  │
+  ├── 1:N (profile_id FK)
+  │   ▼
+  │ scheduled_posts
+  │   └── N:1 (post_id → generated_posts.id) ON DELETE CASCADE
+  │
+  ├── 1:N (profile_id FK)
+  │   ▼
+  │ media_assets
+  │   └── N:1 (generated_post_id → generated_posts.id) ON DELETE CASCADE
+  │
   └── 1:N (profile_id FK)
       ▼
     course_materials
@@ -296,7 +357,11 @@ profiles
 - A **generated_post** references one **daily_learning_entry** (via `journal_entry_id` FK).
 - A **generated_post** references one **curriculum_day** (via `day_number` FK).
 - A **generated_post** has zero or one **media_asset** (via `generated_post_id` FK, UNIQUE).
+- A **generated_post** has zero or more **scheduled_posts** (via `post_id` FK).
+- A **profile** has zero or one **linkedin_connection** (via `profile_id` FK, UNIQUE).
 - A **media_asset** references one **generated_post** (via `generated_post_id` FK) and one **profile** (via `profile_id` FK).
+- A **scheduled_post** references one **generated_post** (via `post_id` FK) and one **profile** (via `profile_id` FK).
+- A **profile** has many **course_materials** (via `profile_id` FK); a course material has many **course_material_pages** (via `course_material_id` FK).
 - `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
 - `ON DELETE RESTRICT` on `daily_learning_entries.day_number` prevents deleting a curriculum day that has journal entries.
 - `ON DELETE RESTRICT` on `generated_posts.day_number` prevents deleting a curriculum day that has generated posts.
@@ -314,6 +379,9 @@ profiles
 | `daily_learning_entries_set_updated_at` | `daily_learning_entries` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `generated_posts_set_updated_at` | `generated_posts` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `media_assets_set_updated_at` | `media_assets` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `linkedin_connections_set_updated_at` | `linkedin_connections` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `scheduled_posts_set_updated_at` | `scheduled_posts` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `course_materials_set_updated_at` | `course_materials` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 
 The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
 
@@ -321,7 +389,7 @@ The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPD
 
 ## Row Level Security (RLS)
 
-All six tables have RLS **enabled** with restrictive policies:
+All ten tables have RLS **enabled** with restrictive policies:
 
 - **`profiles`**: Owner-only access (`auth.uid() = id`) for all operations.
 - **`modules`**: SELECT for authenticated users only; no write access for users.
@@ -329,6 +397,8 @@ All six tables have RLS **enabled** with restrictive policies:
 - **`daily_learning_entries`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`generated_posts`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`media_assets`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
+- **`linkedin_connections`**: Owner-only access (`auth.uid() = profile_id`) for all operations. At most one row per user (UNIQUE on `profile_id`).
+- **`scheduled_posts`**: Owner-only access (`auth.uid() = profile_id`) for all operations. The cron publisher uses the service-role key to bypass RLS.
 - **`course_materials`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`course_material_pages`**: Owner-only via join (`EXISTS (SELECT 1 FROM course_materials cm WHERE cm.id = course_material_id AND cm.profile_id = auth.uid())`) for SELECT/INSERT/UPDATE/DELETE.
 - **Storage buckets**: `post-images` and `course-materials` are **private**; access goes through authenticated server routes. The `course-materials` bucket additionally restricts object paths to `{profile_id}/…` prefixes.
@@ -386,6 +456,12 @@ All six tables have RLS **enabled** with restrictive policies:
 20. **Storage path prevents collisions** — `{profile_id}/{post_id}/image.svg` ensures users cannot accidentally overwrite each other's files.
 
 21. **Media assets store metadata separately from storage** — the `media_assets` table tracks dimensions, template, alt text, and metadata. The actual SVG lives in Supabase Storage.
+
+22. **linkedin_connections uses UNIQUE on profile_id** — one active LinkedIn connection per user. Tokens are stored server-side only; anon/RLS policies prevent client reads.
+
+23. **scheduled_posts uses a partial unique index** — only `status = 'scheduled'` rows are unique per `post_id`, allowing a post to be rescheduled after cancellation or failure.
+
+24. **schedule_status enum** — typed lifecycle (`scheduled` → `publishing` → `published` | `failed`, or `scheduled` → `cancelled`) keeps the state machine explicit at the database level.
 
 ---
 
