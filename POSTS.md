@@ -5,7 +5,7 @@
 The `generated_posts` table stores AI-generated LinkedIn content derived from a user's journal entries. Each post is created by an AI provider (or the fallback template) and persisted for later editing, approval, and publishing.
 
 Journal entries can originate two ways: typed manually on `/journal`, or
-pre-filled automatically from an uploaded course PDF via the Phase 3I pipeline
+pre-filled automatically from an uploaded course PDF via the Phase 3I/3J pipeline
 (`/course-materials` — see [COURSE_PDF_INGESTION.md](COURSE_PDF_INGESTION.md)).
 Both paths converge on the same `submitJournal()` → generation flow; nothing in
 this document's pipeline changed.

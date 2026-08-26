@@ -75,11 +75,17 @@ function setupDb() {
     insert: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
-    eq: vi.fn(),
-    single: vi.fn().mockResolvedValue({
-      data: { id: "doc-e2e", profile_id: mockUser.id },
-      error: null,
-    }),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn()
+      // First call: duplicate check → null (no duplicate)
+      .mockResolvedValueOnce({ data: null, error: null })
+      // Second call: insert result
+      .mockResolvedValueOnce({
+        data: { id: "doc-e2e", profile_id: mockUser.id },
+        error: null,
+      }),
   };
   materials.update.mockReturnValue({
     eq: () => Promise.resolve({ data: null, error: null }),

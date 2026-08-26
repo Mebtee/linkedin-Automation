@@ -1,6 +1,6 @@
 # COURSE_PDF_INGESTION.md — Course PDF → Journal → Post Pipeline
 
-Phase 3I: upload a course PDF and get a pre-filled, evidence-traceable journal
+Phase 3I/3J: upload a course PDF and get a pre-filled, evidence-traceable journal
 proposal that flows through the **existing** journal → post-generation pipeline.
 
 ---
@@ -12,14 +12,17 @@ Upload PDF (client)
   └─► uploadCourseMaterial() server action
         └─► ingestCourseMaterial() service
               ├─ 1. validatePdfUpload      (size, %PDF magic bytes, name sanitize)
-              ├─ 2. insert course_materials row          (status: processing)
-              ├─ 3. storage upload          (PRIVATE bucket, {uid}/{docId}/name.pdf)
-              ├─ 4. extractPdfText          (unpdf/pdf.js server-side)
-              ├─ 5. persist pages           (course_material_pages, 1 row/page)
-              ├─ 6. matchCurriculum         (deterministic ranking vs 105 days)
-              ├─ 7. buildJournalFromCourseMaterial   (anti-hallucination rules)
-              ├─ 8. enhanceProposalWithAI   (optional, Gemini only, best-effort)
-              └─ 9. persist proposal        (status: completed | failed + error_code)
+              ├─ 2. computeContentHash     (SHA-256 for duplicate detection)
+              ├─ 3. check duplicate        (same user + same content → reject)
+              ├─ 4. insert course_materials row          (status: processing)
+              ├─ 5. storage upload          (PRIVATE bucket, {uid}/{docId}/name.pdf)
+              ├─ 6. extractPdfText          (unpdf/pdf.js server-side)
+              ├─ 7. persist pages           (course_material_pages, 1 row/page)
+              ├─ 8. matchCurriculum         (deterministic ranking vs 105 days)
+              ├─ 9. detectDaySections       (multi-day PDF → per-day page ranges)
+              ├─ 10. buildJournalFromCourseMaterial   (anti-hallucination rules)
+              ├─ 11. enhanceProposalWithAI  (optional, Gemini only, best-effort)
+              └─ 12. persist proposal       (status: completed | failed + error_code)
 ```
 
 The proposal is shown in a review UI (`/course-materials`). The user can correct
@@ -29,6 +32,28 @@ the day, edit any field, pick a confidence level (1–5), then:
 - **Submit & Continue** → existing `saveJournal()` + `submitJournal()` →
   redirect to `/journal?day=N`, where `generatePostForDay()` picks it up
   (it only processes journals with status exactly `"submitted"`).
+
+### Reprocessing (Phase 3J)
+
+After initial submission, users can reprocess a course material to re-run
+curriculum matching without re-reading the PDF. The reprocessor:
+
+- Loads **stored extracted pages** (no PDF re-read required)
+- Re-runs curriculum matching and journal building
+- **Preserves USER_CONFIRMED fields** — user-edited values are never overwritten
+- Applies field priority: `USER_CONFIRMED > SUPPORTED_BY_PDF > INFERRED_FROM_STRUCTURE > MISSING`
+
+### Duplicate Detection (Phase 3J)
+
+Each upload computes a SHA-256 content hash. If the same user uploads identical
+content, the upload is rejected with a `PDF_DUPLICATE` error. Hashes are stored
+in the `content_hash` column on `course_materials`.
+
+### Multi-Day PDF Support (Phase 3J)
+
+PDFs containing explicit `Day N` headers are automatically segmented into
+per-day page ranges. The `multi_day_sections` column stores the detected
+boundaries. No topic-based heuristic detection — only explicit "Day N" references.
 
 No changes were made to the manual journal workflow or the generation pipeline.
 
@@ -59,6 +84,15 @@ Every field carries an `evidence` entry:
 
 All 13 fields always have an evidence entry — nothing is untraceable.
 
+### Field Priority (Phase 3J)
+
+When reprocessing, the system enforces a strict priority:
+
+1. **USER_CONFIRMED** — never overwritten by reprocessing or AI enhancement
+2. **SUPPORTED_BY_PDF** — regenerated from stored page text
+3. **INFERRED_FROM_STRUCTURE** — regenerated from curriculum data
+4. **MISSING** — stays null until user provides a value
+
 ### AI enhancement guardrails
 
 - Runs **only** when `AI_TEXT_PROVIDER=gemini`; otherwise skipped entirely.
@@ -88,12 +122,15 @@ user-overridable.
 
 ## Database
 
-Migration: `supabase/migrations/20260824000000_course_materials.sql`
+Migrations:
+- `supabase/migrations/20260824000000_course_materials.sql` (Phase 3I)
+- `supabase/migrations/20260826000000_course_materials_3j.sql` (Phase 3J)
 
 - **`course_materials`** — one row per uploaded PDF
   (`profile_id`, `file_name`, `storage_path`, `page_count`,
   `processing_status` = processing/completed/failed, `error_code`,
-  `journal_proposal` jsonb). RLS: owner-only for SELECT/INSERT/UPDATE/DELETE.
+  `journal_proposal` jsonb, **`content_hash`** text, **`multi_day_sections`** jsonb).
+  RLS: owner-only for SELECT/INSERT/UPDATE/DELETE.
 - **`course_material_pages`** — extracted text per page
   (`course_material_id` FK cascade, `page_number`, `extracted_text`).
   RLS: owner-only, enforced through a join to `course_materials.profile_id`.
@@ -120,17 +157,19 @@ See [ENVIRONMENT.md](ENVIRONMENT.md).
 
 | Path | Purpose |
 |---|---|
-| `src/types/course-material.ts` | Domain types (proposal, evidence, extraction) |
-| `src/services/course-materials/validation.ts` | Size/magic-byte checks, filename sanitize |
+| `src/types/course-material.ts` | Domain types (proposal, evidence, extraction, MultiDaySection, ProcessingStage) |
+| `src/services/course-materials/validation.ts` | Size/magic-byte checks, filename sanitize, **computeContentHash** |
 | `src/services/course-materials/extraction.ts` | unpdf text extraction + page analysis |
 | `src/services/course-materials/matching.ts` | Deterministic curriculum matching |
+| `src/services/course-materials/multi-day.ts` | **Multi-day section detection** |
 | `src/services/course-materials/journal-builder.ts` | Anti-hallucination proposal builder |
 | `src/services/course-materials/ai-enhance.ts` | Optional Gemini refinement |
-| `src/services/course-materials/persistence.ts` | Ingestion orchestrator + CRUD |
-| `src/app/actions/course-materials.ts` | Server actions |
-| `src/app/course-materials/` + `src/components/course-materials/` | Review UI |
+| `src/services/course-materials/persistence.ts` | Ingestion orchestrator, CRUD, **reprocessCourseMaterial**, duplicate check |
+| `src/app/actions/course-materials.ts` | Server actions (upload, list, reprocess, delete, page text) |
+| `src/app/course-materials/` + `src/components/course-materials/` | Review UI (evidence panel, page preview, curriculum match panel) |
 | `src/tests/fixtures/pdf-fixture.ts` | Programmatic valid-PDF generator for tests |
 
-Tests: 64 new (validation, extraction on real generated PDFs, matching,
-builder invariants, AI guardrails, persistence pipeline, actions, e2e contract).
-Full suite: **798 passing**.
+Tests: 855 passing (validation, extraction, matching, builder, AI guardrails,
+persistence pipeline, **duplicate detection**, **multi-day detection**,
+**reprocessing**, **field priority**, component tests for evidence panel,
+page preview, curriculum match panel, actions, e2e contract).

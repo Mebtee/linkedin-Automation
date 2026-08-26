@@ -23,9 +23,10 @@ function makeChain() {
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockResolvedValue({ data: [], error: null }),
-    single: vi.fn(),
-    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    limit: vi.fn().mockReturnThis(),
   };
 }
 
@@ -44,10 +45,14 @@ describe("ingestCourseMaterial", () => {
   };
 
   function setupDb() {
-    chains.materials.single.mockResolvedValue({
-      data: { id: "doc-1", profile_id: mockUser.id, processing_status: "processing" },
-      error: null,
-    });
+    // First .single() is the duplicate check — must return null (no duplicate).
+    // Second .single() is the insert — must return the material record.
+    chains.materials.single
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: { id: "doc-1", profile_id: mockUser.id, processing_status: "processing" },
+        error: null,
+      });
     // .update(...).eq("id", ...) must resolve as an awaitable chain.
     chains.materials.update.mockReturnValue({
       eq: vi.fn().mockResolvedValue({ data: null, error: null }),

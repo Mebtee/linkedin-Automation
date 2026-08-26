@@ -104,11 +104,33 @@ export type CourseJournalProposal = {
   readonly rationale: readonly string[];
   /** How the proposal text was produced: deterministic parser or AI-enhanced. */
   readonly builtBy: "deterministic" | "ai";
+  /** Whether the day was matched via an explicit "Day N" reference in the PDF. */
+  readonly explicitDayMatch: boolean;
 };
 
 // ─── Persistence Rows ───────────────────────────────────────────────────────
 
 export type CourseMaterialStatus = "pending" | "processing" | "completed" | "failed";
+
+/** Processing stage shown in the UI during upload/processing. */
+export type ProcessingStage =
+  | "uploading"
+  | "validating"
+  | "extracting"
+  | "matching"
+  | "building"
+  | "enhancing"
+  | "ready"
+  | "needs_review"
+  | "failed";
+
+/** A detected day section within a multi-day PDF. */
+export type MultiDaySection = {
+  readonly dayNumber: number;
+  readonly startPage: number;
+  readonly endPage: number;
+  readonly confidence: MatchConfidence;
+};
 
 export type CourseMaterialRow = {
   id: string;
@@ -119,6 +141,8 @@ export type CourseMaterialRow = {
   processing_status: CourseMaterialStatus;
   error_code: string | null;
   journal_proposal: CourseJournalProposal | null;
+  content_hash: string | null;
+  multi_day_sections: MultiDaySection[] | null;
   created_at: string;
   updated_at: string;
 };

@@ -242,5 +242,6 @@ export function buildJournalFromCourseMaterial(input: {
     candidates: match.candidates,
     rationale: match.rationale,
     builtBy: "deterministic",
+    explicitDayMatch: match.explicitDayNumber !== null,
   };
 }

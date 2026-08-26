@@ -96,3 +96,22 @@ export function pdfErrorMessage(err: unknown): string {
   if (err instanceof AppError) return err.message;
   return "The course material could not be processed. Please try a different PDF.";
 }
+
+// ─── Content Hash ───────────────────────────────────────────────────────────
+
+/**
+ * Computes a SHA-256 hex digest of the raw PDF bytes.
+ * Used for deterministic duplicate detection: same user + same hash = duplicate.
+ * Runs server-side only via Web Crypto API.
+ */
+export async function computeContentHash(bytes: Uint8Array): Promise<string> {
+  const arrayBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}

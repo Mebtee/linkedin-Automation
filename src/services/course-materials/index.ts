@@ -5,6 +5,7 @@ export {
 export type { PageStructure } from "./extraction";
 export { matchCurriculum } from "./matching";
 export type { CurriculumSourceData } from "./matching";
+export { detectDaySections } from "./multi-day";
 export {
   buildJournalFromCourseMaterial,
   collectLearningStatements,
@@ -14,10 +15,18 @@ export {
   buildEnhancementPrompt,
   validateEnhancement,
 } from "./ai-enhance";
-export { getMaxPdfSizeMb, sanitizeFileName, validatePdfUpload } from "./validation";
+export {
+  getMaxPdfSizeMb,
+  sanitizeFileName,
+  validatePdfUpload,
+  computeContentHash,
+} from "./validation";
 export {
   ingestCourseMaterial,
+  reprocessCourseMaterial,
   listOwnCourseMaterials,
   getOwnCourseMaterial,
+  getOwnCourseMaterialPage,
+  getOwnCourseMaterialPages,
   deleteOwnCourseMaterial,
 } from "./persistence";

@@ -51,6 +51,7 @@ function makeProposal(): CourseJournalProposal {
     candidates: [],
     rationale: [],
     builtBy: "deterministic",
+    explicitDayMatch: true,
   };
 }
 

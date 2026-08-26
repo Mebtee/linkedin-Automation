@@ -257,7 +257,7 @@ Tracks scheduled future LinkedIn publications. Lifecycle is independent from pos
 
 ### `course_materials`
 
-One row per uploaded course PDF (Phase 3I). Tracks processing state and holds the
+One row per uploaded course PDF (Phase 3I/3J). Tracks processing state and holds the
 final journal proposal. See [COURSE_PDF_INGESTION.md](COURSE_PDF_INGESTION.md).
 
 | Column | Type | Constraints | Description |
@@ -270,9 +270,11 @@ final journal proposal. See [COURSE_PDF_INGESTION.md](COURSE_PDF_INGESTION.md).
 | `processing_status` | `text` | NOT NULL, default `'processing'`, CHECK in (`processing`,`completed`,`failed`) | Ingestion lifecycle |
 | `error_code` | `text` | nullable | AppError code when `failed` (e.g. `PDF_EXTRACTION_FAILED`) |
 | `journal_proposal` | `jsonb` | nullable | Full `CourseJournalProposal` (fields + evidence + candidates) |
+| **`content_hash`** | `text` | nullable | SHA-256 hash of raw PDF bytes for duplicate detection |
+| **`multi_day_sections`** | `jsonb` | nullable | Array of `{dayNumber, startPage, endPage, confidence}` for multi-day PDFs |
 | `created_at` / `updated_at` | `timestamptz` | NOT NULL, defaults / trigger | Timestamps |
 
-**Indexes:** `idx_cm_profile_id`, `idx_cm_status`, `idx_cm_created_at`.
+**Indexes:** `idx_cm_profile_id`, `idx_cm_status`, `idx_cm_created_at`, **`idx_cm_content_hash`** on `(profile_id, content_hash)`.
 
 ---
 
