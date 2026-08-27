@@ -44,7 +44,16 @@ In the LinkedIn developer portal:
    | `SCHEDULER_SECRET` | 32-byte hex random; shared with GitHub Actions |
    | `AI_TEXT_PROVIDER` | `gemini` for real generation |
    | `GEMINI_API_KEY` | Google AI Studio key |
-   | `MAX_PDF_SIZE_MB` | Optional; max course-PDF upload size in MB (default `10`, clamped 1–100) |
+    | `MAX_PDF_SIZE_MB` | Optional; max course-PDF upload size in MB (default `10`, clamped 1–100) |
+
+   > **Important — middleware crash:** A fresh Vercel import has **no** env vars
+   > configured. The middleware (`src/middleware.ts`) reads
+   > `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` on every request;
+   > if either is missing it throws immediately and **every page returns
+   > `500 MIDDLEWARE_INVOCATION_FAILED`**. Configure the vars above **before** the
+   > first deploy, else `/api/health` also returns `status: "error"` /
+   > `database: "unavailable"` (its admin client needs `NEXT_PUBLIC_SUPABASE_URL`
+   > + `SUPABASE_SERVICE_ROLE_KEY`).
 
 3. Deploy, then set the custom domain if desired.
 
@@ -87,6 +96,8 @@ change). It collates safety-relevant items spread across the other sections.
 **Secrets & config**
 - [ ] No real secrets are committed; only `.env.example` (names/placeholders) is tracked.
 - [ ] All required env vars are set in the host: `NEXT_PUBLIC_APP_URL`,
+      `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (missing these
+      causes `500 MIDDLEWARE_INVOCATION_FAILED`),
       `SUPABASE_SERVICE_ROLE_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`,
       `LINKEDIN_OAUTH_STATE_SECRET`, `SCHEDULER_SECRET`.
 - [ ] `AI_TEXT_PROVIDER` + `GEMINI_API_KEY` are set if real generation is wanted
