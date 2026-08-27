@@ -44,6 +44,7 @@ In the LinkedIn developer portal:
    | `SCHEDULER_SECRET` | 32-byte hex random; shared with GitHub Actions |
    | `AI_TEXT_PROVIDER` | `gemini` for real generation |
    | `GEMINI_API_KEY` | Google AI Studio key |
+   | `MAX_PDF_SIZE_MB` | Optional; max course-PDF upload size in MB (default `10`, clamped 1–100) |
 
 3. Deploy, then set the custom domain if desired.
 
@@ -77,6 +78,42 @@ for testing.
    cron run; status transitions `scheduled → publishing → published`;
    `attempt_count` is exactly 1.
 8. **Scheduler auth**: POST without/wrong secret → 401; valid secret → 200.
+
+## 5b. Pre-launch production checklist
+
+Run through this checklist before going live (or for any major environment
+change). It collates safety-relevant items spread across the other sections.
+
+**Secrets & config**
+- [ ] No real secrets are committed; only `.env.example` (names/placeholders) is tracked.
+- [ ] All required env vars are set in the host: `NEXT_PUBLIC_APP_URL`,
+      `SUPABASE_SERVICE_ROLE_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`,
+      `LINKEDIN_OAUTH_STATE_SECRET`, `SCHEDULER_SECRET`.
+- [ ] `AI_TEXT_PROVIDER` + `GEMINI_API_KEY` are set if real generation is wanted
+      (otherwise the template fallback provider is used automatically).
+- [ ] `NEXT_PUBLIC_APP_URL` is the deployed HTTPS origin (drives OAuth + email links).
+- [ ] Version-control / CI checks pass on a clean run: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`.
+
+**Database & storage**
+- [ ] All `supabase/migrations/` applied; `pnpm seed:curriculum` run.
+- [ ] RLS enabled on every table; anon-key clients can only read/write their own rows.
+- [ ] `post-images` bucket is **private**; owner-only policies by path prefix.
+- [ ] `course-materials` bucket is **private**; course-material storage is server-role-only.
+- [ ] Scheduled backup + documented restore procedure in place (see `DATABASE.md`).
+
+**LinkedIn**
+- [ ] OAuth state secret rotated to a fresh random value; not the dev value.
+- [ ] Redirect URL configured for production origin; only minimal scopes
+      (`openid profile email` + `w_member_social`) requested.
+- [ ] Publish (manual and scheduled) verified end-to-end; failed schedule + reconnect path tested.
+
+**Scheduler**
+- [ ] GitHub Actions repository secrets (`SCHEDULER_SECRET`, `APP_URL`) match the server.
+- [ ] Unauthorized publish requests return 401 (no secret leakage).
+
+**Observability**
+- [ ] Publisher cron and LinkedIn callback logs (see `src/lib/logger.ts`) are reachable and
+      contain only non-secret fields (UUIDs, status, counts — never tokens/keys).
 
 ## 6. Recovery / reconnect procedures
 

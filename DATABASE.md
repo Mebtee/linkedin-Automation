@@ -492,3 +492,56 @@ To seed the 105-day curriculum:
 3. Run via `supabase db seed` or a dedicated script
 
 See `scripts/seed-curriculum/README.md` for details.
+
+---
+
+## Backup & Recovery
+
+### Supabase-managed backups
+
+Hosted Supabase projects enable **automatic daily backups** by default (retain
+the project's plan and restore window). You can also take an on-demand backup
+from the Dashboard: **Project → Database → Backups → Create a backup**.
+
+Verify backups are healthy periodically (a backup you never test is not a
+backup). Test a restore in a throwaway project at least once per release cycle.
+
+### Logical dumps (portable, for staging / local)
+
+SQL dumps capture schema + data in plain SQL and can be restored into any
+Postgres-backed environment (local, staging, new project). They do **not**
+include storage objects.
+
+```bash
+# Dump
+supabase db dump --data-only > backup_$(date +%Y%m%d_%H%M).sql
+
+# Restore into a target database
+supabase db reset --db-url "$TARGET_DB_URL" --seed-file ...   # target env specific
+```
+
+### What the tables hold (restore implications)
+
+| Data | Location | Restore note |
+| --- | --- | --- |
+| User profiles, journals, posts, media metadata, LinkedIn connections, schedules | Postgres tables | Restored by a SQL dump. |
+| Generated image SVGs (`post-images`) and course PDFs (`course-materials`) | Supabase **Storage** | **Not** in a SQL dump — back these up with the Storage backup / export tooling. |
+| Curriculum (`modules`, `curriculum_days`) | Postgres tables | Re-creatable via `pnpm seed:curriculum` if lost. |
+
+### Recovery procedures
+
+- **Point-in-time (PITR) / last-daily-backup**: use the Dashboard's Backup →
+  Restore to recover to a specific time before the incident.
+- **Storage-only loss**: re-import `post-images` / `course-materials` objects;
+  row metadata survives in Postgres.
+- **LinkedIn tokens are server-side only**: they are stored in
+  `linkedin_connections` and are covered by Postgres dumps. If a dump is lost,
+  users re-authorize via Settings (Reauthorize); publish scope is re-requested.
+
+### Backup hygiene
+
+1. Keep dumps outside the git repo (they contain PII and encrypted secrets —
+   never commit them).
+2. Egress dumps over a trusted channel; treat them as secrets.
+3. Add a recurring (e.g. weekly) restore smoke-test to CI or a scheduled task.
+

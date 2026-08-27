@@ -5,6 +5,7 @@ import { timingSafeEqual } from "crypto";
 
 import { requireServerEnv } from "@/config/env.server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { log } from "@/lib/logger";
 import { getAccessToken, buildMemberUrn } from "@/services/linkedin/connection";
 import { publishToLinkedIn } from "@/services/linkedin/publish";
 import {
@@ -37,10 +38,12 @@ function verifySchedulerSecret(request: Request): boolean {
 
 export async function POST(request: Request) {
   if (!verifySchedulerSecret(request)) {
+    log.warn("scheduler.unauthorized", { action: "publish" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const adminSupabase = createAdminClient();
+  const startTime = Date.now();
   const results: Array<{
     scheduleId: string;
     postId: string;
@@ -225,6 +228,17 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Scheduler failed";
+    log.error("scheduler.run_failed", { errorCategory: "INTERNAL" });
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    const outcomeCounts = results.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    log.info("scheduler.run_complete", {
+      processed: results.length,
+      outcomes: outcomeCounts,
+      durationMs: Date.now() - startTime,
+    });
   }
 }

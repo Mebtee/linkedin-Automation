@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requirePublicEnv } from "@/config/env";
 import { createWriteClient } from "@/lib/supabase/server";
+import { log } from "@/lib/logger";
 import {
   verifyOAuthState,
   exchangeCodeForToken,
@@ -91,7 +92,10 @@ export async function GET(request: Request) {
     });
 
     if (dbError) {
-      console.error("Failed to store LinkedIn connection:", dbError);
+      log.error("linkedin.connection_store_failed", {
+        mode: payload.mode,
+        profileId: user.id,
+      });
       settingsUrl.searchParams.set("linkedin", "db_error");
       return NextResponse.redirect(settingsUrl);
     }
@@ -103,8 +107,8 @@ export async function GET(request: Request) {
       settingsUrl.searchParams.set("linkedin", "connected");
     }
     return NextResponse.redirect(settingsUrl);
-  } catch (error) {
-    console.error("LinkedIn callback processing failed:", error);
+  } catch {
+    log.error("linkedin.callback_failed", { mode: payload.mode });
     settingsUrl.searchParams.set("linkedin", "callback_error");
     return NextResponse.redirect(settingsUrl);
   }

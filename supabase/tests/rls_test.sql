@@ -1,5 +1,11 @@
 -- ============================================================================
--- RLS Test Script — Phase 1F (single-result version)
+-- RLS Test Script — Phase 1F + 3A–3J (single-result version)
+--
+-- NOTE (Phase 4): the post-images bucket was PUBLIC in Phase 3E but was
+-- flipped to PRIVATE in Phase 3H (migration 20260822000000_post_images_private.sql)
+-- because published posts are text-only. Assertions below reflect the CURRENT
+-- production schema: private bucket + owner-only storage policies. Never
+-- revert these to "public".
 -- ============================================================================
 
 -- ─── Setup ──────────────────────────────────────────────────────────────────
@@ -127,16 +133,93 @@ select * from (values
         and column_name in ('id','profile_id','linkedin_sub','token_type','expires_at','scope','linkedin_name','linkedin_email','created_at','updated_at')
     ) = 10 then 'PASS' else 'FAIL' end),
 
-  -- post-images storage bucket (Phase 3F): user-prefix policies
-  ('41. post-images bucket exists and is public-read',
-    case when exists (select 1 from storage.buckets where id = 'post-images' and public = true) then 'PASS' else 'FAIL' end),
-  ('42. post-images upload restricted to own prefix',
+  -- post-images storage bucket (Phase 3H): PRIVATE + owner-only policies
+  ('41. post-images bucket is private (Phase 3H)',
+    case when exists (select 1 from storage.buckets where id = 'post-images' and public = false) then 'PASS' else 'FAIL' end),
+  ('41b. no world-readable public select policy on post-images',
+    case when not exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'post_images_select_public'
+    ) then 'PASS' else 'FAIL' end),
+  ('42. post-images read restricted to own folder prefix',
+    case when exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'post_images_select_own'
+        and qual like '%storage.foldername(name)%'
+        and qual like '%auth.uid()%'
+    ) then 'PASS' else 'FAIL' end),
+  ('42b. post-images upload restricted to own prefix',
     case when exists (
       select 1 from pg_policies
       where schemaname = 'storage' and tablename = 'objects'
         and policyname = 'post_images_insert_authenticated'
         and with_check like '%storage.foldername(name)%'
         and with_check like '%auth.uid()%'
+    ) then 'PASS' else 'FAIL' end),
+
+  -- course_materials (Phase 3I): owner-only, non-public
+  ('43. course_materials has RLS enabled',
+    case when (select relrowsecurity from pg_class where relname = 'course_materials' and relnamespace = 'public'::regnamespace) then 'PASS' else 'FAIL' end),
+  ('44. course_materials SELECT is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'course_materials' and policyname = 'cm_select_own' and qual = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('45. course_materials INSERT is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'course_materials' and policyname = 'cm_insert_own' and with_check = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('46. course_materials UPDATE is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'course_materials' and policyname = 'cm_update_own' and qual = '(auth.uid() = profile_id)' and with_check = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('47. course_materials DELETE is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'course_materials' and policyname = 'cm_delete_own' and qual = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('48. No anon SELECT on course_materials',
+    case when not exists (select 1 from pg_policies where tablename = 'course_materials' and cmd = 'SELECT' and 'anon' = any(roles)) then 'PASS' else 'FAIL' end),
+
+  -- course_material_pages (Phase 3I): owner-through-parent, non-public
+  ('49. course_material_pages has RLS enabled',
+    case when (select relrowsecurity from pg_class where relname = 'course_material_pages' and relnamespace = 'public'::regnamespace) then 'PASS' else 'FAIL' end),
+  ('50. course_material_pages SELECT joins through owning material',
+    case when exists (
+      select 1 from pg_policies
+      where tablename = 'course_material_pages' and policyname = 'cmp_select_own'
+    ) then 'PASS' else 'FAIL' end),
+  ('51. No anon SELECT on course_material_pages',
+    case when not exists (select 1 from pg_policies where tablename = 'course_material_pages' and cmd = 'SELECT' and 'anon' = any(roles)) then 'PASS' else 'FAIL' end),
+
+  -- course-materials storage bucket (Phase 3I): PRIVATE + owner prefix
+  ('52. course-materials bucket is private',
+    case when exists (select 1 from storage.buckets where id = 'course-materials' and public = false) then 'PASS' else 'FAIL' end),
+  ('53. course-materials read restricted to own folder prefix',
+    case when exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'course_materials_select_own'
+        and qual like '%storage.foldername(name)%'
+        and qual like '%auth.uid()%'
+    ) then 'PASS' else 'FAIL' end),
+  ('54. course-materials insert restricted to own folder prefix',
+    case when exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'course_materials_insert_own'
+        and with_check like '%storage.foldername(name)%'
+        and with_check like '%auth.uid()%'
+    ) then 'PASS' else 'FAIL' end),
+  ('55. course-materials delete restricted to own folder prefix',
+    case when exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'course_materials_delete_own'
+        and qual like '%storage.foldername(name)%'
+        and qual like '%auth.uid()%'
+    ) then 'PASS' else 'FAIL' end),
+
+  -- general hardening: no anon access to private owner tables
+  ('56. No anon access on any user-private table',
+    case when not exists (
+      select 1 from pg_policies
+      where tablename in ('generated_posts','media_assets','linkedin_connections',
+                          'scheduled_posts','daily_learning_entries','course_materials',
+                          'course_material_pages')
+        and 'anon' = any(roles)
     ) then 'PASS' else 'FAIL' end)
 ) as t(test, status);
 
