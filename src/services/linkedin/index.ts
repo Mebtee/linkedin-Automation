@@ -22,5 +22,7 @@ export {
 
 export {
   publishToLinkedIn,
+  loadPostImage,
   type LinkedInPublishResult,
+  type LinkedInImageInput,
 } from "./publish";

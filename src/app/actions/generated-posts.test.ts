@@ -20,6 +20,7 @@ vi.mock("@/services/linkedin", () => ({
   getAccessToken: vi.fn(),
   buildMemberUrn: (sub: string) => `urn:li:person:${sub}`,
   publishToLinkedIn: vi.fn(),
+  loadPostImage: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -317,6 +318,42 @@ describe("Post Server Actions", () => {
         "test-token",
         approvedPost,
         "urn:li:person:li-sub-user",
+      );
+    });
+
+    it("passes the generated image to publishToLinkedIn when one exists", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+        linkedinSub: "li-sub-user",
+      });
+      const imageInput = {
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: "image/png",
+        altText: "Day 1 of the journey",
+      };
+      const { loadPostImage } = await import("@/services/linkedin");
+      (loadPostImage as Mock).mockResolvedValue(imageInput);
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: true,
+        linkedinPostId: "urn:li:share:456",
+      });
+      (updatePublishState as Mock).mockResolvedValue({
+        ...approvedPost,
+        status: "published",
+        linkedin_post_id: "urn:li:share:456",
+      });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(true);
+      expect(publishToLinkedIn).toHaveBeenCalledWith(
+        "test-token",
+        approvedPost,
+        "urn:li:person:li-sub-user",
+        imageInput,
       );
     });
 

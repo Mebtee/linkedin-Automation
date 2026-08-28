@@ -7,7 +7,7 @@ import { requireServerEnv } from "@/config/env.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { log } from "@/lib/logger";
 import { getAccessToken, buildMemberUrn } from "@/services/linkedin/connection";
-import { publishToLinkedIn } from "@/services/linkedin/publish";
+import { publishToLinkedIn, loadPostImage } from "@/services/linkedin/publish";
 import {
   findDueScheduledPosts,
   claimScheduledPost,
@@ -140,13 +140,26 @@ export async function POST(request: Request) {
         }
 
         // Publish to LinkedIn (author URN must use the stored OpenID Connect
-        // subject, not the internal profile UUID).
+        // subject, not the internal profile UUID). Attach the generated image
+        // when the post has one.
         const memberUrn = buildMemberUrn(tokenData.linkedinSub);
-        const result = await publishToLinkedIn(
-          tokenData.token,
-          postData as unknown as GeneratedPostRow,
-          memberUrn,
+        const image = await loadPostImage(
+          adminSupabase,
+          schedule.post_id,
+          schedule.profile_id,
         );
+        const result = image
+          ? await publishToLinkedIn(
+              tokenData.token,
+              postData as unknown as GeneratedPostRow,
+              memberUrn,
+              image,
+            )
+          : await publishToLinkedIn(
+              tokenData.token,
+              postData as unknown as GeneratedPostRow,
+              memberUrn,
+            );
 
         if (result.success && result.linkedinPostId) {
           // Mark schedule as published FIRST. This is the duplicate-publish

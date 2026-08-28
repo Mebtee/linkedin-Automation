@@ -296,6 +296,13 @@ class FakeDb {
             for (const p of paths) this.files.delete(`${bucket}/${p}`);
             return { data: paths, error: null };
           },
+          download: async (path: string) => {
+            const content = this.files.get(`${bucket}/${path}`);
+            if (content === undefined) {
+              return { data: null, error: { message: "Object not found" } };
+            }
+            return { data: new Blob([content], { type: "image/svg+xml" }), error: null };
+          },
         }),
       },
     };
@@ -395,16 +402,36 @@ beforeEach(() => {
   adminDb = new FakeDb(null);
   seedDatabase(userDb);
   adminDb.tables = userDb.tables;
+  adminDb.files = userDb.files;
 
   (createClient as unknown as Mock).mockResolvedValue(userDb.client());
   (createWriteClient as unknown as Mock).mockResolvedValue(userDb.client());
   (createAdminClient as unknown as Mock).mockReturnValue(adminDb.client());
 
   fetchMock.mockReset();
-  fetchMock.mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ id: "urn:li:share:JOURNEY1" }),
+  // Route LinkedIn calls: image registration, image upload, then the post.
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes("/v2/assets")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          value: {
+            uploadUrl: "https://media.upload.example/JOURNEY_ASSET",
+            asset: "urn:li:digitalmediaAsset:JOURNEY_ASSET",
+          },
+        }),
+      };
+    }
+    if (url.includes("media.upload.example")) {
+      return { ok: true, status: 201, json: async () => ({}) };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "urn:li:share:JOURNEY1" }),
+    };
   });
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -489,12 +516,25 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
     expect(body.processed).toBe(1);
     expect(body.results[0]!.status).toBe("published");
 
-    // LinkedIn called with author URN from stored OpenID subject.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.linkedin.com/v2/ugcPosts");
+    // LinkedIn called with author URN from stored OpenID subject. The post
+    // includes an image, so LinkedIn sees asset registration, the upload PUT,
+    // and the UGC post itself (3 calls).
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const ugcCall = fetchMock.mock.calls.find(
+      ([u]) => String(u) === "https://api.linkedin.com/v2/ugcPosts",
+    ) as [string, RequestInit];
+    expect(ugcCall).toBeDefined();
+    const init = ugcCall[1];
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${LINKEDIN_TOKEN}`);
-    const payloadBody = JSON.parse(init.body as string) as { author: string };
+    const payloadBody = JSON.parse(init.body as string) as {
+      author: string;
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text: string };
+          shareMediaCategory: string;
+        };
+      };
+    };
     expect(payloadBody.author).toBe(`urn:li:person:${LINKEDIN_SUB}`);
 
     const finalSchedule = userDb.tables.scheduled_posts![0]!;
@@ -517,7 +557,7 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
     );
     const body2 = (await res2.json()) as { processed: number };
     expect(body2.processed).toBe(0);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("supports manual publishing (non-scheduled) after the same ingestion journey", async () => {

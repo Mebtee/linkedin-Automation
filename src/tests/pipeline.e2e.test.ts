@@ -300,6 +300,13 @@ class FakeDb {
             for (const p of paths) this.files.delete(`${bucket}/${p}`);
             return { data: paths, error: null };
           },
+          download: async (path: string) => {
+            const content = this.files.get(`${bucket}/${path}`);
+            if (content === undefined) {
+              return { data: null, error: { message: "Object not found" } };
+            }
+            return { data: new Blob([content], { type: "image/svg+xml" }), error: null };
+          },
           getPublicUrl: (path: string) => ({
             data: { publicUrl: `https://fake.supabase.co/storage/v1/object/public/${bucket}/${path}` },
           }),
@@ -380,16 +387,36 @@ beforeEach(() => {
   seedDatabase(userDb);
   // The admin client shares the same database state but bypasses RLS scoping.
   adminDb.tables = userDb.tables;
+  adminDb.files = userDb.files;
 
   (createClient as unknown as Mock).mockResolvedValue(userDb.client());
   (createWriteClient as unknown as Mock).mockResolvedValue(userDb.client());
   (createAdminClient as unknown as Mock).mockReturnValue(adminDb.client());
 
   fetchMock.mockReset();
-  fetchMock.mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ id: "urn:li:share:E2E123" }),
+  // Route LinkedIn calls: image registration, image upload, then the post.
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes("/v2/assets")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          value: {
+            uploadUrl: "https://media.upload.example/E2E_ASSET",
+            asset: "urn:li:digitalmediaAsset:E2E_ASSET",
+          },
+        }),
+      };
+    }
+    if (url.includes("media.upload.example")) {
+      return { ok: true, status: 201, json: async () => ({}) };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "urn:li:share:E2E123" }),
+    };
   });
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -468,18 +495,34 @@ describe("End-to-end content pipeline (3A → 3G-C)", () => {
     expect(body.results[0]!.postId).toBe(post.id);
 
     // The author URN must come from the stored OpenID Connect subject.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.linkedin.com/v2/ugcPosts");
+    // The post includes an image, so LinkedIn sees asset registration, the
+    // upload PUT, and the UGC post itself (3 calls).
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const ugcCall = fetchMock.mock.calls.find(
+      ([u]) => String(u) === "https://api.linkedin.com/v2/ugcPosts",
+    ) as [string, RequestInit];
+    expect(ugcCall).toBeDefined();
+    const init = ugcCall[1];
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${LINKEDIN_TOKEN}`);
     const payloadBody = JSON.parse(init.body as string) as {
       author: string;
-      specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: string } } };
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text: string };
+          shareMediaCategory: string;
+          media?: Array<{ media: string }>;
+        };
+      };
     };
     expect(payloadBody.author).toBe(`urn:li:person:${LINKEDIN_SUB}`);
-    expect(payloadBody.specificContent["com.linkedin.ugc.ShareContent"].shareCommentary.text).toContain(
-      "HTML Basics",
-    );
+    const share = payloadBody.specificContent["com.linkedin.ugc.ShareContent"];
+    expect(share.shareCommentary.text).toContain("HTML Basics");
+    expect(share.shareMediaCategory).toBe("IMAGE");
+    expect(share.media?.[0]).toEqual({
+      status: "READY",
+      description: { text: expect.any(String) },
+      media: "urn:li:digitalmediaAsset:E2E_ASSET",
+    });
 
     // Final database state: schedule + post both published with the LinkedIn id.
     const finalSchedule = userDb.tables.scheduled_posts![0]!;

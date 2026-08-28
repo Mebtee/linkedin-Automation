@@ -9,7 +9,7 @@ import {
   updatePublishState,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
-import { getAccessToken, buildMemberUrn, publishToLinkedIn } from "@/services/linkedin";
+import { getAccessToken, buildMemberUrn, publishToLinkedIn, loadPostImage } from "@/services/linkedin";
 import { createWriteClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
@@ -189,9 +189,13 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
       };
     }
 
-    // 5. Build the member URN and publish
+    // 5. Build the member URN and publish (attach the generated image when one exists)
+    const adminClient = createAdminClient();
     const memberUrn = buildMemberUrn(tokenData.linkedinSub);
-    const result = await publishToLinkedIn(tokenData.token, post, memberUrn);
+    const image = await loadPostImage(adminClient, post.id, user.id);
+    const result = image
+      ? await publishToLinkedIn(tokenData.token, post, memberUrn, image)
+      : await publishToLinkedIn(tokenData.token, post, memberUrn);
 
     // 6. Update the post based on the result
     if (result.success && result.linkedinPostId) {

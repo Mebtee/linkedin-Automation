@@ -20,6 +20,7 @@ vi.mock("@/services/linkedin/connection", () => ({
 
 vi.mock("@/services/linkedin/publish", () => ({
   publishToLinkedIn: vi.fn(),
+  loadPostImage: vi.fn(),
 }));
 
 vi.mock("@/services/scheduling", () => ({
@@ -40,7 +41,7 @@ import { POST } from "./route";
 import { requireServerEnv } from "@/config/env.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccessToken } from "@/services/linkedin/connection";
-import { publishToLinkedIn } from "@/services/linkedin/publish";
+import { publishToLinkedIn, loadPostImage } from "@/services/linkedin/publish";
 import {
   findDueScheduledPosts,
   claimScheduledPost,
@@ -109,6 +110,7 @@ describe("POST /api/scheduler/publish", () => {
     (loadPostForPublishing as Mock).mockResolvedValue(null);
     (getAccessToken as Mock).mockResolvedValue(null);
     (publishToLinkedIn as Mock).mockResolvedValue({ success: false });
+    (loadPostImage as Mock).mockResolvedValue(null);
     (markSchedulePublished as Mock).mockResolvedValue(undefined);
     (markScheduleFailed as Mock).mockResolvedValue(undefined);
     (updatePublishStateWithClient as Mock).mockResolvedValue(undefined);

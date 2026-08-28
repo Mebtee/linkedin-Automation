@@ -186,5 +186,155 @@ describe("LinkedIn Publish Service", () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe("INSUFFICIENT_SCOPE");
     });
+
+    it("attaches an image: registers upload, PUTs bytes, and posts with IMAGE category", async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              value: {
+                uploadUrl: "https://api.linkedin.com/mediaUpload/UPLOAD1",
+                asset: "urn:li:digitalmediaAsset:ASSET1",
+              },
+            }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 201, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: "urn:li:share:IMG1" }),
+        });
+      globalThis.fetch = mockFetch;
+
+      const image = {
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        mimeType: "image/png",
+        altText: "Day 1 of the journey",
+      };
+
+      const result = await publishToLinkedIn(
+        "token",
+        makePost(),
+        "urn:li:person:u1",
+        image,
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      // 1. Register the image upload.
+      const [registerUrl, registerOpts] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(registerUrl).toBe(
+        "https://api.linkedin.com/v2/assets?action=registerUpload",
+      );
+      expect(registerOpts.method).toBe("POST");
+      const registerBody = JSON.parse(registerOpts.body as string);
+      expect(registerBody.registerUploadRequest.owner).toBe("urn:li:person:u1");
+      expect(registerBody.registerUploadRequest.recipes).toContain(
+        "urn:li:digitalmediaRecipe:feedshare-image",
+      );
+
+      // 2. PUT the image bytes to the pre-signed URL.
+      const [putUrl, putOpts] = mockFetch.mock.calls[1] as [string, RequestInit];
+      expect(putUrl).toBe("https://api.linkedin.com/mediaUpload/UPLOAD1");
+      expect(putOpts.method).toBe("PUT");
+      expect((putOpts.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
+
+      // 3. Create the UGC post referencing the asset.
+      const [postUrl, postOpts] = mockFetch.mock.calls[2] as [string, RequestInit];
+      expect(postUrl).toBe("https://api.linkedin.com/v2/ugcPosts");
+      const postBody = JSON.parse(postOpts.body as string);
+      const share = postBody.specificContent["com.linkedin.ugc.ShareContent"];
+      expect(share.shareMediaCategory).toBe("IMAGE");
+      expect(share.media).toEqual([
+        {
+          status: "READY",
+          description: { text: "Day 1 of the journey" },
+          media: "urn:li:digitalmediaAsset:ASSET1",
+        },
+      ]);
+    });
+
+    it("rasterizes SVG images to PNG before upload", async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              value: {
+                uploadUrl: "https://api.linkedin.com/mediaUpload/UPLOAD2",
+                asset: "urn:li:digitalmediaAsset:ASSET2",
+              },
+            }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 201, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: "urn:li:share:IMG2" }),
+        });
+      globalThis.fetch = mockFetch;
+
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#0F172A"/></svg>`;
+
+      const result = await publishToLinkedIn(
+        "token",
+        makePost(),
+        "urn:li:person:u1",
+        { bytes: new TextEncoder().encode(svg), mimeType: "image/svg+xml", altText: "" },
+      );
+
+      expect(result.success).toBe(true);
+      const putOpts = mockFetch.mock.calls[1]![1] as RequestInit;
+      expect((putOpts.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
+      const pngBytes = (putOpts.body as Uint8Array).byteLength;
+      expect(pngBytes).toBeGreaterThan(100);
+      // PNG signature
+      const body = new Uint8Array(putOpts.body as ArrayBuffer);
+      expect(Array.from(body.slice(0, 4))).toEqual([137, 80, 78, 71]);
+    });
+
+    it("returns an error when image registration fails", async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ message: "Bad upload request" }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const result = await publishToLinkedIn(
+        "token",
+        makePost(),
+        "urn:li:person:u1",
+        { bytes: new Uint8Array([1]), mimeType: "image/png", altText: "" },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("image registration failed");
+    });
+
+    it("returns INSUFFICIENT_SCOPE when image registration is denied for scope", async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error_code: "SCOPES_INSUFFICIENT" }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const result = await publishToLinkedIn(
+        "token",
+        makePost(),
+        "urn:li:person:u1",
+        { bytes: new Uint8Array([1]), mimeType: "image/png", altText: "" },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("INSUFFICIENT_SCOPE");
+    });
   });
 });
