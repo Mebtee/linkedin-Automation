@@ -35,7 +35,7 @@ In the LinkedIn developer portal:
 
    | Name | Notes |
    | --- | --- |
-   | `NEXT_PUBLIC_APP_URL` | `https://<production-domain>` |
+   | `NEXT_PUBLIC_APP_URL` | `https://<production-domain>` — base of the LinkedIn OAuth `redirect_uri` (`<base>/api/linkedin/callback`). Must match the callback URL registered in the LinkedIn app. If unset, the app falls back to the request origin instead. |
    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
    | `SUPABASE_SERVICE_ROLE_KEY` | Server-only; bypasses RLS |
@@ -102,7 +102,7 @@ change). It collates safety-relevant items spread across the other sections.
       `LINKEDIN_OAUTH_STATE_SECRET`, `SCHEDULER_SECRET`.
 - [ ] `AI_TEXT_PROVIDER` + `GEMINI_API_KEY` are set if real generation is wanted
       (otherwise the template fallback provider is used automatically).
-- [ ] `NEXT_PUBLIC_APP_URL` is the deployed HTTPS origin (drives OAuth + email links).
+- [ ] `NEXT_PUBLIC_APP_URL` is the deployed HTTPS origin (drives OAuth `redirect_uri` + email links). The LinkedIn OAuth `redirect_uri` is `<NEXT_PUBLIC_APP_URL>/api/linkedin/callback`, and it is used for both the authorization step and the token exchange.
 - [ ] Version-control / CI checks pass on a clean run: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`.
 
 **Database & storage**

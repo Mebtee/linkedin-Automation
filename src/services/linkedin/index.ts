@@ -7,6 +7,8 @@ export {
   fetchLinkedInUserInfo,
 } from "./oauth";
 
+export { resolveLinkedInCallbackRedirectUri } from "./redirect";
+
 export {
   getConnectionStatus,
   getAccessToken,

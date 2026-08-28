@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { requirePublicEnv } from "@/config/env";
 import { createWriteClient } from "@/lib/supabase/server";
 import { log } from "@/lib/logger";
 import {
@@ -8,6 +7,7 @@ import {
   exchangeCodeForToken,
   fetchLinkedInUserInfo,
   upsertConnection,
+  resolveLinkedInCallbackRedirectUri,
 } from "@/services/linkedin";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
   try {
     // Exchange the authorization code for tokens
-    const redirectUri = `${requirePublicEnv("appUrl")}/api/linkedin/callback`;
+    const redirectUri = resolveLinkedInCallbackRedirectUri(request);
     const tokenResponse = await exchangeCodeForToken(code, redirectUri);
 
     // Fetch the user's LinkedIn profile info

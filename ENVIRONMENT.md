@@ -14,7 +14,7 @@ its scope, and when it becomes required. It is the source of truth for the
 
 | Variable | Scope | Required | Description |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Public | When links to the app are generated | Canonical base URL of the app (e.g. `http://localhost:3000` in development). |
+| `NEXT_PUBLIC_APP_URL` | Public | When links to the app are generated | Canonical base URL of the app (`http://localhost:3000` in development; the deployed HTTPS origin in production). Also the base of the LinkedIn OAuth `redirect_uri` (`<base>/api/linkedin/callback`) — it must equal the callback URL registered for the current environment in the LinkedIn app. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public | When Supabase is integrated | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | When Supabase is integrated | Supabase anon/public key (safe for the browser under RLS). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only | When privileged server ops are added | Supabase service-role key. Bypasses RLS; server-only, never exposed to the client. |

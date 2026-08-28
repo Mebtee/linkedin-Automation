@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { requirePublicEnv } from "@/config/env";
 import { createWriteClient } from "@/lib/supabase/server";
 import {
   generateOAuthState,
   buildAuthorizationUrl,
   buildReauthAuthorizationUrl,
+  resolveLinkedInCallbackRedirectUri,
 } from "@/services/linkedin";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const redirectUri = `${requirePublicEnv("appUrl")}/api/linkedin/callback`;
+    const redirectUri = resolveLinkedInCallbackRedirectUri(request);
 
     const state = generateOAuthState(user.id, mode);
     const authUrl =
