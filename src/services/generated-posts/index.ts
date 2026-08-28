@@ -13,6 +13,7 @@ import {
   validateStatusTransition,
   validateGeneratedPostStatus,
 } from "./validation";
+import type { RecruiterQualityReport } from "@/types/recruiter-quality";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -410,6 +411,42 @@ export async function findGeneratedPostByOpportunity(
   }
 
   return (data ?? null) as GeneratedPostRow | null;
+}
+
+/**
+ * Stores the deterministic post-quality report (Phase 5D) on a generated post.
+ * Owner-scoped. The score/report columns are NOT part of the public
+ * create/update inputs — only this server-side annotator writes them, so a
+ * client can never inject a fake quality report to bypass the approve gate.
+ */
+export async function annotateGeneratedPostQuality(
+  postId: string,
+  quality: { readonly score: number; readonly report: RecruiterQualityReport },
+): Promise<GeneratedPostRow> {
+  const supabase = await createClient();
+  const user = await requireAuth(supabase);
+
+  await loadOwnPost(supabase, user.id, postId);
+
+  const { data, error } = await supabase
+    .from("generated_posts")
+    .update({
+      recruiter_quality_score: quality.score,
+      recruiter_quality_report: quality.report,
+    })
+    .eq("id", postId)
+    .eq("profile_id", user.id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new AppError("Failed to save the post quality report.", {
+      code: "DATABASE_ERROR",
+      cause: error,
+    });
+  }
+
+  return data as GeneratedPostRow;
 }
 
 // ─── Publish State ──────────────────────────────────────────────────────────

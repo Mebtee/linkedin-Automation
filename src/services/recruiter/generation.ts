@@ -20,15 +20,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { AppError } from "@/lib/utils/errors";
-import type { JournalContext, PostFormat } from "@/types/ai";
-import type {
-  ContentOpportunityRow,
-  RecruiterPostGenerationContext,
-  RecruiterEvidenceEntry,
-} from "@/types/content-opportunity";
-import type { EvidenceType } from "@/types/course-material";
+import type { PostFormat } from "@/types/ai";
+import type { ContentOpportunityRow } from "@/types/content-opportunity";
 import type { GeneratedPostRow } from "@/types/generated-post";
-import type { JournalEntry } from "@/types/journal";
 import type { PostType } from "@/types/content-opportunity";
 import { POST_TYPE_META } from "@/config/recruiter";
 import {
@@ -40,8 +34,12 @@ import {
   loadJournalEntryForRecruiter,
   loadModuleForRecruiter,
 } from "@/services/ai/generation";
-import { findGeneratedPostByOpportunity } from "@/services/generated-posts";
+import { findGeneratedPostByOpportunity, annotateGeneratedPostQuality } from "@/services/generated-posts";
 import { updateContentOpportunityStatus } from "./persistence";
+import { buildRecruiterPostGenerationContext, journalRowToContext, strongestConfidence } from "./context";
+import { qualityReportForPost } from "./quality";
+
+export { buildRecruiterPostGenerationContext };
 
 // ─── Error Codes ─────────────────────────────────────────────────────────────
 
@@ -64,13 +62,6 @@ export type GeneratePostFromOpportunityResult =
 
 const GENERATION_ELIGIBLE_STATUSES = new Set(["candidate", "selected", "generated"]);
 const REQUIRED_STATUSES_FOR_UPDATE = new Set(["candidate", "selected"]);
-
-const CONFIDENCE_ORDER: Record<EvidenceType, number> = {
-  USER_CONFIRMED: 4,
-  SUPPORTED_BY_PDF: 3,
-  INFERRED_FROM_STRUCTURE: 2,
-  MISSING: 1,
-};
 
 // ─── Format Selection ────────────────────────────────────────────────────────
 // Maps each post type to the existing PostFormat that best fits its structure.
@@ -96,83 +87,6 @@ export function selectFormatForPostType(postType: PostType): PostFormat {
     case "CAREER_PROGRESS":
       return "reflection";
   }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Maps a submitted journal row into the camelCase AI/journal shape. */
-function journalRowToContext(entry: JournalEntry): JournalContext {
-  return {
-    whatILearned: entry.what_i_learned,
-    whatIPracticed: entry.what_i_practiced,
-    whatIBuilt: entry.what_i_built,
-    challenge: entry.challenge,
-    howISolvedIt: entry.how_i_solved_it,
-    keyTakeaway: entry.key_takeaway,
-    tomorrowFocus: entry.tomorrow_focus,
-    projectName: entry.project_name,
-    projectDescription: entry.project_description,
-    codeReference: entry.code_reference,
-    resourcesUsed: entry.resources_used,
-    confidenceLevel: entry.confidence_level,
-    additionalNotes: entry.additional_notes,
-  };
-}
-
-function strongestConfidence(entries: readonly { readonly confidence: EvidenceType }[]): EvidenceType {
-  let best: EvidenceType = "MISSING";
-  for (const entry of entries) {
-    if (CONFIDENCE_ORDER[entry.confidence] > CONFIDENCE_ORDER[best]) best = entry.confidence;
-  }
-  return best;
-}
-
-// ─── Context Builder (pure, deterministic) ───────────────────────────────────
-
-/**
- * Builds the recruiter-aware generation context for an opportunity.
- *
- * The context carries:
- *   - the opportunity's primary content direction (postType / title / summary),
- *   - its deterministic score and the public selection reason,
- *   - the enriched evidence (exact ground-truth text per field + confidence).
- *
- * It is pure: no database, no AI. Identical inputs produce identical contexts.
- */
-export function buildRecruiterPostGenerationContext(
-  opportunity: ContentOpportunityRow,
-  journal: JournalContext,
-  format: PostFormat,
-  options: { readonly topic?: string } = {},
-): RecruiterPostGenerationContext {
-  const evidence: RecruiterEvidenceEntry[] = (opportunity.evidence ?? []).map((reference) => {
-    const raw = journal[reference.field as keyof JournalContext];
-    const value = typeof raw === "string" && raw.trim() !== "" ? raw : null;
-    return {
-      field: reference.field,
-      value,
-      confidence: reference.confidence,
-      pageNumbers: [...reference.pageNumbers],
-    };
-  });
-
-  return {
-    opportunityId: opportunity.id,
-    postType: opportunity.post_type,
-    contentGoal: opportunity.content_goal,
-    title: opportunity.title,
-    summary: opportunity.summary,
-    recruiterScore: Math.round(Number(opportunity.recruiter_score) || 0),
-    recruiterScoreBreakdown: opportunity.recruiter_score_breakdown,
-    selectionReason: opportunity.selection_reason,
-    evidence,
-    evidenceStrength: strongestConfidence(evidence),
-    personalExperience: POST_TYPE_META[opportunity.post_type].personalExperience,
-    journal,
-    dayNumber: opportunity.day_number,
-    topic: options.topic ?? opportunity.title,
-    format,
-  };
 }
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
@@ -220,7 +134,7 @@ const GENERATION_ELIGIBLE_ERROR_CODES: ReadonlySet<string> = new Set([
   "VALIDATION_ERROR",
 ]);
 
-async function runOpportunityGeneration(opportunityId: string): Promise<GeneratePostFromOpportunityResult> {
+async function runOpportunityGeneration(opportunityId: string, options: { readonly regenerate?: boolean } = {}): Promise<GeneratePostFromOpportunityResult> {
   if (typeof opportunityId !== "string" || opportunityId.trim() === "") {
     throw new AppError("opportunityId is required.", { code: "VALIDATION_ERROR" });
   }
@@ -244,9 +158,12 @@ async function runOpportunityGeneration(opportunityId: string): Promise<Generate
     );
   }
 
-  // 3. Duplicate protection: never generate twice for the same opportunity.
+  // 3. Duplicate protection: the FIRST generation never creates a second post
+  //    for the same opportunity. Regeneration is exempt — the user explicitly
+  //    asked for a NEW candidate, so duplicates of the current post are the
+  //    point of the action (identical output is caught by the shared core).
   const existing = await findGeneratedPostByOpportunity(opportunity.id);
-  if (existing) {
+  if (existing && !options.regenerate) {
     return { ok: true, post: existing, created: false, duplicate: true };
   }
 
@@ -315,12 +232,48 @@ async function runOpportunityGeneration(opportunityId: string): Promise<Generate
     opportunityId: opportunity.id,
   });
 
+  // 9b. Assess the new post deterministically and persist the quality report.
+  const report = qualityReportForPost(post, recruiter);
+  const annotated = await annotateGeneratedPostQuality(post.id, {
+    score: report.score,
+    report,
+  });
+
   // 10. Mark the opportunity `generated` ONLY after the post is persisted.
+  //     Regeneration keeps the existing `generated` status.
   if (REQUIRED_STATUSES_FOR_UPDATE.has(opportunity.status)) {
     await updateContentOpportunityStatus(opportunity.id, "generated");
   }
 
-  return { ok: true, post, created: true, duplicate: false };
+  return { ok: true, post: annotated, created: true, duplicate: false };
+}
+
+/**
+ * Generates a NEW candidate post from an already-generated opportunity
+ * (Phase 5D regeneration). Unlike the first generation, this bypasses the
+ * "existing post wins" shortcut so the reviewer can compare candidates. The
+ * shared core's day/format/content-hash dedup still applies — a model that
+ * returns identical content is rejected as a duplicate.
+ */
+export async function regeneratePostFromOpportunity(
+  opportunityId: string,
+): Promise<GeneratePostFromOpportunityResult> {
+  try {
+    return await runOpportunityGeneration(opportunityId, { regenerate: true });
+  } catch (err) {
+    const code =
+      err instanceof AppError ? (err.code as RecruiterGenerationErrorCode) : "GENERATION_FAILED";
+    const safe = GENERATION_ELIGIBLE_ERROR_CODES.has(code);
+    return {
+      ok: false,
+      code: safe ? code : "GENERATION_FAILED",
+      message: safe
+        ? err instanceof Error
+          ? err.message
+          : "Could not regenerate a post from this opportunity."
+        : "Post regeneration from this opportunity failed. Please try again.",
+    };
+  }
 }
 
 // ─── Owner-Scoped Lookup ─────────────────────────────────────────────────────

@@ -62,6 +62,9 @@ Future: Post Editor → Approval → LinkedIn Publishing
 | `model` | `text` | NOT NULL | AI model name |
 | `tokens_used` | `integer` | nullable | Token count (if available) |
 | `content_hash` | `text` | NOT NULL | SHA-256 hash for duplicate detection |
+| `opportunity_id` | `uuid` | nullable, FK → `content_opportunities(id)` ON DELETE SET NULL | Linked Phase 5B/5C content opportunity |
+| `recruiter_quality_score` | `integer` | nullable, check 0..100 | Deterministic post-quality score (Phase 5D) |
+| `recruiter_quality_report` | `jsonb` | nullable | Safe post-quality report (Phase 5D) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | Creation timestamp |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | Last update timestamp |
 
@@ -302,10 +305,29 @@ const result = await generatePost({ dayNumber: 1 });
 |--------|-------------|
 | `getPost(postId)` | Load a single post |
 | `getPostHistory()` | Load all user posts |
-| `updatePost(postId, input)` | Save content edits |
-| `approvePost(postId)` | Transition draft → approved |
+| `updatePost(postId, input)` | Save content edits (re-evaluates recruiter quality when opportunity-backed) |
+| `approvePost(postId)` | Transition draft → approved (runs the Phase 5D quality gate for opportunity-backed posts) |
+| `regenerateOpportunityPost(opportunityId)` | User-triggered regeneration of an opportunity post (Phase 5D) |
 | `deletePost(postId)` | Delete draft/failed posts |
 | `regeneratePost(dayNumber, format?)` | Generate new post for same day |
+
+### Recruiter Quality Gate (Phase 5D)
+
+For opportunity-backed posts (`opportunity_id` set), the editor shows a
+`RecruiterQualityPanel` (score, recommendation, dimension bars, strengths,
+improvements, warnings) and an `OpportunitySummaryPanel` with the stored Phase 5B
+selection. See [RECRUITER_CONTENT.md](RECRUITER_CONTENT.md).
+
+`approvePost` **always re-evaluates** the post server-side before changing
+status:
+
+- Strong / Ready → approved.
+- Needs review → approved only after explicit confirmation in the approve dialog.
+- Below 55 or a critical safety finding (unsupported "I built…" claim, missing
+  required section) → blocked with `QUALITY_GATE_BLOCKED`; status never changes.
+
+`updatePost` returns a freshly recomputed report so the panel reflects edits;
+`regenerateOpportunityPost` re-runs generation and re-evaluates.
 
 ### Editor Behavior
 

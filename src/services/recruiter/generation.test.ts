@@ -12,7 +12,7 @@ import {
   loadJournalEntryForRecruiter,
   loadModuleForRecruiter,
 } from "@/services/ai/generation";
-import { findGeneratedPostByOpportunity } from "@/services/generated-posts";
+import { findGeneratedPostByOpportunity, annotateGeneratedPostQuality } from "@/services/generated-posts";
 import { updateContentOpportunityStatus } from "./persistence";
 import { buildPostGenerationInput } from "@/services/ai/input-builder";
 import { createClient } from "@/lib/supabase/server";
@@ -38,6 +38,7 @@ vi.mock("@/services/ai/generation", () => ({
 }));
 vi.mock("@/services/generated-posts", () => ({
   findGeneratedPostByOpportunity: vi.fn(),
+  annotateGeneratedPostQuality: vi.fn(),
 }));
 vi.mock("./persistence", () => ({
   updateContentOpportunityStatus: vi.fn(),
@@ -158,6 +159,8 @@ const savedPost: GeneratedPostRow = {
   tokens_used: null,
   content_hash: "hash-1",
   opportunity_id: "opp-1",
+  recruiter_quality_score: null,
+  recruiter_quality_report: null,
   linkedin_post_id: null,
   published_at: null,
   publish_error: null,
@@ -241,6 +244,9 @@ function stubMocks(options: {
   } else {
     vi.mocked(generatePostFromPreparedInput).mockResolvedValue(options.coreResult ?? savedPost);
   }
+  vi.mocked(annotateGeneratedPostQuality).mockImplementation(async () => {
+    return options.coreResult ?? savedPost;
+  });
   vi.mocked(updateContentOpportunityStatus).mockResolvedValue(
     { ...(options.opportunity ?? opportunityRow()), status: "generated" },
   );
@@ -253,6 +259,7 @@ function resetMocks() {
   vi.mocked(loadJournalEntryForRecruiter).mockReset();
   vi.mocked(buildPostGenerationInput).mockReset();
   vi.mocked(generatePostFromPreparedInput).mockReset();
+  vi.mocked(annotateGeneratedPostQuality).mockReset();
   vi.mocked(updateContentOpportunityStatus).mockReset();
 }
 

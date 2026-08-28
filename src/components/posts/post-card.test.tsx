@@ -24,6 +24,8 @@ const mockPost = {
   tokens_used: null,
   content_hash: "abc123",
   opportunity_id: null,
+  recruiter_quality_score: null,
+  recruiter_quality_report: null,
   linkedin_post_id: null,
   published_at: null,
   publish_error: null,

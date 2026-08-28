@@ -13,6 +13,8 @@ import {
   listContentOpportunities,
   updateContentOpportunityStatus,
 } from "@/services/recruiter/persistence";
+import { findGeneratedPostByOpportunity } from "@/services/generated-posts";
+import type { PublishRecommendation } from "@/types/recruiter-quality";
 import { generatePostFromOpportunity } from "@/services/recruiter/generation";
 import {
   generateContentOpportunitiesForCourseMaterial,
@@ -195,4 +197,46 @@ export async function generatePostFromOpportunityAction(
     created: result.created,
     duplicate: result.duplicate,
   };
+}
+
+// ─── Linked Post Quality Summary (Phase 5D) ─────────────────────────────────
+
+export type OpportunityPostQualityResult =
+  | {
+      success: true;
+      post: {
+        id: string;
+        status: GeneratedPostRow["status"];
+        score: number | null;
+        recommendation: PublishRecommendation | null;
+      } | null;
+    }
+  | { success: false; error: string };
+
+/**
+ * Returns a compact quality summary of the draft already generated for an
+ * opportunity (if any). Used by the opportunities card so a reviewer sees the
+ * post's status + quality without leaving the list. Owner-scoped.
+ */
+export async function getPostQualityForOpportunityAction(
+  opportunityId: string,
+): Promise<OpportunityPostQualityResult> {
+  try {
+    const post = await findGeneratedPostByOpportunity(opportunityId);
+    if (!post) return { success: true, post: null };
+    return {
+      success: true,
+      post: {
+        id: post.id,
+        status: post.status,
+        score: post.recruiter_quality_score,
+        recommendation: post.recruiter_quality_report?.recommendation ?? null,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not load the linked post quality.",
+    };
+  }
 }

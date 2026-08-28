@@ -6,6 +6,7 @@ import type {
 } from "@/types/ai";
 import { AIError } from "@/types/ai";
 import type { RecruiterPostGenerationContext } from "@/types/content-opportunity";
+import type { RecruiterContentBrief } from "@/types/recruiter-quality";
 import { validateGeneratedPostPayload } from "@/services/ai/validation";
 import { POST_TYPE_META } from "@/config/recruiter";
 import { TemplateFallbackProvider } from "./fallback";
@@ -140,6 +141,9 @@ export class GeminiTextProvider implements TextGenerationProvider {
     const recruiterSection = recruiter
       ? this.buildRecruiterSection(recruiter)
       : "";
+    const briefSection = input.recruiterBrief
+      ? this.buildContentBriefSection(input.recruiterBrief)
+      : "";
     const guidelines = recruiter
       ? this.buildRecruiterGuidelines()
       : `- Write in first-person beginner voice ("I learned...", "I practiced...")
@@ -174,6 +178,7 @@ export class GeminiTextProvider implements TextGenerationProvider {
 - Never invent project results, technologies, problems, or achievements
 - Never claim mastery or expertise — this is a beginner learning journey
 ${recruiterSection}
+${briefSection}
 
 ## Curriculum Context
 ${curriculumSection}
@@ -297,6 +302,28 @@ Choose the most appropriate template based on the content:
 - When evidence is insufficient for a personal claim, describe the topic as learning rather than personal achievement
 - Use short, simple sentences
 - Sound like a real developer learning in public`;
+  }
+
+  /**
+   * Injects the deterministic recruiter content brief (Phase 5D): primary goal,
+   * recruiter signal, and the exact claims the post is forbidden from making.
+   */
+  private buildContentBriefSection(brief: RecruiterContentBrief): string {
+    const lines: string[] = [
+      "## Recruiter Content Brief",
+      `- Primary goal: ${brief.primaryGoal}`,
+      `- Recruiter signal: ${brief.recruiterSignal}`,
+      `- Strongest evidence: ${brief.strongestEvidence}`,
+      `- Technical focus: ${brief.technicalFocus}`,
+    ];
+    if (brief.practicalFocus) lines.push(`- Practical focus: ${brief.practicalFocus}`);
+    if (brief.problemSolvingFocus) lines.push(`- Problem-solving focus: ${brief.problemSolvingFocus}`);
+    if (brief.growthFocus) lines.push(`- Growth focus: ${brief.growthFocus}`);
+    lines.push("Forbidden claims:");
+    for (const forbidden of brief.forbiddenClaims) {
+      lines.push(`  - ${forbidden}`);
+    }
+    return lines.join("\n");
   }
 
   private buildRecruiterHashtagRequirements(

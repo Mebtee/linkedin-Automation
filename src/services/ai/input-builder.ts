@@ -7,6 +7,7 @@ import type {
 import type { RecruiterPostGenerationContext } from "@/types/content-opportunity";
 import type { JournalEntry } from "@/types/journal";
 import { content } from "@/config/content";
+import { buildRecruiterContentBrief } from "@/services/recruiter/brief";
 
 // ─── Curriculum Day Row (subset needed for input building) ───────────────────
 
@@ -119,6 +120,8 @@ export function buildPostGenerationInput(params: {
     brandVoice: content.brandVoice,
     format,
     rules: content.rules,
-    ...(recruiter ? { recruiter } : {}),
+    ...(recruiter
+      ? { recruiter, recruiterBrief: buildRecruiterContentBrief(recruiter) }
+      : {}),
   };
 }

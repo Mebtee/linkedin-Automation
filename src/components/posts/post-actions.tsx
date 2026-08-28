@@ -9,6 +9,8 @@ type PostActionsProps = {
   isRegenerating: boolean;
   isPublishing: boolean;
   isConnected: boolean;
+  approveBlocked?: boolean;
+  approveBlockReason?: string;
   onSave: () => void;
   onApprove: () => void;
   onRegenerate: () => void;
@@ -24,6 +26,8 @@ export function PostActions({
   isRegenerating,
   isPublishing,
   isConnected,
+  approveBlocked = false,
+  approveBlockReason,
   onSave,
   onApprove,
   onRegenerate,
@@ -51,11 +55,18 @@ export function PostActions({
         <button
           type="button"
           onClick={onApprove}
-          disabled={isBusy}
+          disabled={isBusy || approveBlocked}
+          title={approveBlocked ? approveBlockReason : undefined}
           className="rounded-lg border border-[#06B6D4] bg-[#06B6D4]/10 px-4 py-2 text-sm font-medium text-[#06B6D4] hover:bg-[#06B6D4]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isApproving ? "Approving..." : "Approve Post"}
         </button>
+      )}
+
+      {status === "draft" && approveBlocked && approveBlockReason && (
+        <p className="w-full text-xs text-red-600 dark:text-red-400" role="note">
+          {approveBlockReason} Fix the issues in the quality review, or regenerate a new draft.
+        </p>
       )}
 
       {status === "approved" && (

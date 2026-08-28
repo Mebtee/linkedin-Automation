@@ -1,4 +1,4 @@
-# Recruiter Content System — Phases 5A, 5B & 5C
+# Recruiter Content System — Phases 5A, 5B, 5C & 5D
 
 Deterministic, evidence-grounded LinkedIn content for recruiters.
 
@@ -9,10 +9,17 @@ Deterministic, evidence-grounded LinkedIn content for recruiters.
 - **5B — Evidence → content opportunities (complete)**: converts confirmed
   journal / course-material evidence into scored, persisted, deduplicated
   `content_opportunities` rows (owner-scoped RLS).
-- **5C — Opportunity → post draft (complete, this doc)**: generating a draft from a
+- **5C — Opportunity → post draft (complete)**: generating a draft from a
   selected opportunity through the **existing** shared generation pipeline. The
   opportunity advances to `generated` only after the post is persisted; nothing
   is approved or published automatically.
+- **5D — Deterministic post-quality review (complete, this doc)**: a pure,
+  evidence-safe 0–100 review of a generated post against its opportunity
+  (recruiter relevance, evidence strength, technical depth, practical
+  experience, problem solving, clarity, authenticity, learning & growth), a
+  review-panel UI, and an approve-time gate that always re-evaluates
+  server-side. `needs_review` asks for explicit confirmation; <55 or a critical
+  safety finding blocks approval outright.
 
 ## Anti-hallucination contract (never weakened)
 
@@ -72,10 +79,13 @@ is the deterministic fallback and is also used for unit tests.
   (provider → validation → dedupe → persist; optional `opportunityId`).
 - `src/services/ai/providers/gemini.ts` / `fallback.ts` — recruiter-aware
   prompts (audience, opportunity + evidence ground truth, format, hashtags) and
-  deterministic evidence-safe opportunity posts/images.
+  deterministic evidence-safe opportunity posts/images. Gemini also receives a
+  deterministic **content brief** (see Phase 5D) injected into the input.
 - `src/app/actions/content-opportunities.ts` — thin "use server" wrappers
   (plain result objects, no tokens / chain-of-thought), incl.
-  `generatePostFromOpportunityAction`.
+  `generatePostFromOpportunityAction` and `getPostQualityForOpportunityAction`.
+- `src/app/actions/generated-posts.ts` — post actions incl. the Phase 5D
+  approve gate (`approvePost`) and `regenerateOpportunityPost`.
 
 ## Key behaviors
 
@@ -120,6 +130,92 @@ is the deterministic fallback and is also used for unit tests.
 - **No auto-publish**: the generated result is a `draft` post in the `/posts/[id]`
   editor. Approval and publishing still go through the existing flows.
 
+## Post-quality review (Phase 5D)
+
+### Evaluator (pure & deterministic)
+
+`src/services/recruiter/quality.ts` scores a post on 8 dimensions whose weights sum
+to 100:
+
+| Dimension | Weight |
+|---|---|
+| recruiterRelevance | 20 |
+| evidenceStrength | 20 |
+| technicalDepth | 15 |
+| practicalExperience | 15 |
+| problemSolving | 10 |
+| clarity | 10 |
+| authenticity | 5 |
+| learningGrowth | 5 |
+
+It reads ONLY the post text + the enriched `RecruiterPostGenerationContext`
+(evidence + journal) — no provider, no tokens, no chain-of-thought. The same
+input always produces the same output.
+
+- **Evidence ranking**: `USER_CONFIRMED` → `SUPPORTED_BY_PDF` →
+  `INFERRED_FROM_STRUCTURE` → `MISSING`. Evidence strength rises only when the
+  post's first-person claims are backed by the matching confirmed field
+  (`hasConfirmedEvidence`); `MISSING` evidence never earns the top band.
+- **Critical findings** (output `do_not_publish`): a personal achievement claim
+  ("I built…") not supported by confirmed evidence; a missing required post
+  section. **A critical finding cannot be outvoted by a high total score** —
+  the base is floored so the result can never exceed `needs_review`.
+- **Non-critical warnings**: e.g. "I mastered…/mastering…" (flagged for tone;
+  "expert/expertise" are never flagged). Clarify rules: it handles "model", a
+  missing section means "<60 characters in the section", and fuzzy-match detection
+  works on "handle"/"first-hand"; "the framework is built this way" is NOT a claim.
+- **Never invents**: unknown stop-words / hashtags / sentences are ignored; the
+  context's null evidence yields null practical/problem-solving focus.
+
+### Persistence & service
+
+- `recruiter_quality_score int` (check 0..100, nullable) +
+  `recruiter_quality_report jsonb` (safe public shape: `score`,
+  `recommendation`, `dimensions`, `strengths`, `improvements`, `warnings`,
+  `evaluatedAt`) — migration `20260829000000_recruiter_quality.sql`, additive
+  only, existing posts stay NULL (evaluated on demand).
+- The columns are written ONLY by the server-side
+  `annotateGeneratedPostQuality`; they are not part of public create/update
+  inputs.
+- `src/services/recruiter/quality-service.ts#evaluateRecruiterPostForSavedPost`
+  loads the owner-scoped post + opportunity, builds the context (tolerating a
+  missing journal / curriculum day with honest null-based scores), recomputes the
+  report, persists it, and returns `{ post, report }`.
+
+### Review UI
+
+- `/posts/[id]` server-side evaluates and passes the report to the editor.
+- `RecruiterQualityPanel` renders the score, recommendation badge, per-dimension
+  bars, and the report's strengths / improvements / warnings (no prompts or
+  hidden reasoning).
+- `OpportunitySummaryPanel` shows the stored opportunity as recorded in 5B
+  (post type, goal, opportunity score, day, status, why-selected); it never
+  recomputes the 5B score on screen.
+- `opportunity-generate-card` for a `generated`/`approved`/`published`
+  opportunity shows the linked post's quality badge + "Open Draft" link.
+
+### Approval gate
+
+`approvePost` **always re-evaluates** (`evaluateRecruiterPostForSavedPost`) so a
+tampered stored report can never bypass the gate:
+
+- `strong` / `ready` → approve.
+- `needs_review` → approve only after explicit confirmation in the dialog.
+- `do_not_publish` → blocked with `QUALITY_GATE_BLOCKED`; the status never changes.
+
+`updatePost` re-evaluates and returns the fresh report; `regenerateOpportunityPost`
+re-runs the 5C generator (user-triggered, exempt from the duplicate-return
+shortcut) and returns the regenerated post's report.
+
+### Content brief
+
+`buildRecruiterContentBrief(context)` builds a deterministic, evidence-safe brief
+injected into the generation input (`PostGenerationInput.recruiterBrief`) and into
+the Gemini prompt. It names the strongest confirmed evidence, practical /
+problem-solving / growth focus derived from confirmed fields only, a technical
+focus from the topic + post-type hashtags, and forbidden claims (never invent
+production/outcome claims not present in the evidence; never claim mastery).
+
 ## Tests
 
 - `src/services/recruiter/scoring.test.ts` (Phase 5A)
@@ -132,6 +228,21 @@ is the deterministic fallback and is also used for unit tests.
 - `src/services/recruiter/generation.test.ts` — Phase 5C adapter: context
   building, evidence/status gates, duplicate protection, anti-hallucination,
   format mapping, secret masking, TemplateFallbackProvider behavior.
+- `src/services/recruiter/quality.test.ts` — Phase 5D evaluator: determinism,
+  bounds, safe report shape, evidence ranking, critical finding
+  (do-not-publish) vs supported claims, "framework is built" non-flag, "I
+  mastered…" non-critical warning, score-never-overrides-safety, per-dimension
+  signals, threshold mapping, approve-gate decisions.
+- `src/services/recruiter/quality-service.test.ts` — saved-post evaluation:
+  anonymous denial, missing post / non-opportunity post → null, journal/topic
+  fallbacks, persistence + failure tolerance.
+- `src/services/recruiter/brief.test.ts` — content brief: goal label mapping,
+  strongest-evidence naming, learning-only fallback, confirmed-fields-only
+  focus, forbidden-claim rules, deterministic technical focus.
+- `src/components/{posts/recruiter-quality-panel,posts/opportunity-summary-panel,opportunities/opportunity-generate-card}.test.tsx`
+  — Phase 5D UI rendering, gating props, quality badge + Open Draft link.
+- `src/app/actions/generated-posts.test.ts` — Phase 5D approve gate: re-eval +
+  confirmation approval, `QUALITY_GATE_BLOCKED`, update re-evaluation.
 - `src/app/actions/content-opportunities.test.ts` — action wrappers return plain
   results and never throw (incl. `generatePostFromOpportunityAction`).
 
@@ -144,3 +255,11 @@ Gates: `pnpm test` / `pnpm typecheck` / `pnpm lint` / `pnpm build`.
 - No tokens, secrets, or raw evidence text persisted (references + exact supported
   text only, in-memory; the session never stores chain-of-thought).
 - No auto-approval or auto-publish — generation stops at a draft.
+
+## What Phase 5D explicitly did NOT do
+
+- No changes to the generation pipeline's accepted inputs or state machine.
+- No AI scoring — the post-quality review is 100% deterministic pure code.
+- No hidden reasoning surfaced — the report only carries the safe public shape.
+- No new RLS policies (owner-scoped RLS already covers `generated_posts`).
+- No auto-publish — approval still requires the existing approve + publish flow.

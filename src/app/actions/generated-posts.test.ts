@@ -10,10 +10,14 @@ vi.mock("@/services/generated-posts", () => ({
   changeGeneratedPostStatus: vi.fn(),
   deleteGeneratedPost: vi.fn(),
   updatePublishState: vi.fn(),
+  annotateGeneratedPostQuality: vi.fn(),
 }));
 
 vi.mock("@/services/ai/generation", () => ({
   generatePostForDay: vi.fn(),
+  loadCurriculumDayForRecruiter: vi.fn(),
+  loadJournalEntryForRecruiter: vi.fn(),
+  loadModuleForRecruiter: vi.fn(),
 }));
 
 vi.mock("@/services/linkedin", () => ({
@@ -49,6 +53,7 @@ import {
   changeGeneratedPostStatus,
   deleteGeneratedPost,
   updatePublishState,
+  annotateGeneratedPostQuality,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
 import { getAccessToken, publishToLinkedIn } from "@/services/linkedin";
@@ -61,8 +66,8 @@ const mockPost = {
   profile_id: "user-1",
   journal_entry_id: "journal-1",
   day_number: 1,
-  status: "draft",
-  format: "what-i-learned",
+  status: "draft" as const,
+  format: "what-i-learned" as const,
   opening: "Today I learned Git.",
   body: "Git is a version control system.",
   takeaway: "Git saves versions.",
@@ -186,6 +191,7 @@ describe("Post Server Actions", () => {
   describe("approvePost", () => {
     it("returns success with approved post", async () => {
       const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(mockPost);
       (changeGeneratedPostStatus as Mock).mockResolvedValue(approvedPost);
 
       const result = await approvePost("post-1");
@@ -197,7 +203,92 @@ describe("Post Server Actions", () => {
       expect(changeGeneratedPostStatus).toHaveBeenCalledWith("post-1", "approved");
     });
 
+    it("approves a needs_review opportunity post after re-evaluation with confirmation", async () => {
+      const needsReviewReport = {
+        score: 60,
+        recommendation: "needs_review" as const,
+        dimensions: {
+          recruiterRelevance: 60,
+          evidenceStrength: 60,
+          technicalDepth: 50,
+          practicalExperience: 50,
+          problemSolving: 50,
+          clarity: 70,
+          authenticity: 70,
+          learningGrowth: 50,
+        },
+        strengths: [],
+        improvements: [],
+        warnings: [],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      };
+      const opportunityPost = {
+        ...mockPost,
+        opportunity_id: "op-1",
+        recruiter_quality_score: 60,
+        recruiter_quality_report: needsReviewReport,
+      };
+      const approvedPost = { ...opportunityPost, status: "approved" as const };
+      (getGeneratedPost as Mock).mockResolvedValue(opportunityPost);
+
+      // The approve path re-evaluates server-side before approving. Quality-service
+      // modules are real pure code here; mock the persistence layer it uses.
+      const qualityService = await import("@/services/recruiter/quality-service");
+      vi.mocked(annotateGeneratedPostQuality).mockResolvedValue(opportunityPost);
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue({ post: opportunityPost, report: needsReviewReport });
+
+      (changeGeneratedPostStatus as Mock).mockResolvedValue(approvedPost);
+
+      const result = await approvePost("post-1");
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.post.status).toBe("approved");
+    });
+
+    it("blocks approval when the quality gate returns do_not_publish", async () => {
+      const doNotPublishReport = {
+        score: 50,
+        recommendation: "do_not_publish" as const,
+        dimensions: {
+          recruiterRelevance: 60,
+          evidenceStrength: 40,
+          technicalDepth: 50,
+          practicalExperience: 40,
+          problemSolving: 50,
+          clarity: 70,
+          authenticity: 70,
+          learningGrowth: 50,
+        },
+        strengths: [],
+        improvements: [],
+        warnings: ["Critical: the post makes a personal achievement claim."],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      };
+      const opportunityPost = {
+        ...mockPost,
+        opportunity_id: "op-1",
+        recruiter_quality_score: 50,
+        recruiter_quality_report: doNotPublishReport,
+      };
+      (getGeneratedPost as Mock).mockResolvedValue(opportunityPost);
+
+      const qualityService = await import("@/services/recruiter/quality-service");
+      vi.mocked(annotateGeneratedPostQuality).mockResolvedValue(opportunityPost);
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue({ post: opportunityPost, report: doNotPublishReport });
+
+      const result = await approvePost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("QUALITY_GATE_BLOCKED");
+      }
+      expect(changeGeneratedPostStatus).not.toHaveBeenCalled();
+    });
+
     it("returns error on invalid transition", async () => {
+      (getGeneratedPost as Mock).mockResolvedValue(mockPost);
       (changeGeneratedPostStatus as Mock).mockRejectedValue(
         new Error("Invalid status transition"),
       );

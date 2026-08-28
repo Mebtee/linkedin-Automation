@@ -54,4 +54,22 @@ describe("ApprovePostDialog", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
   });
+
+  it("shows the review-required warning for needs_review posts", () => {
+    render(
+      <ApprovePostDialog
+        {...defaultProps}
+        warning="This draft is close, but the quality review flags a few areas."
+      />,
+    );
+    expect(screen.getByText(/Review required/)).toBeDefined();
+    expect(
+      screen.getByText(/flags a few areas/),
+    ).toBeDefined();
+  });
+
+  it("omits the warning when none is provided", () => {
+    render(<ApprovePostDialog {...defaultProps} warning={null} />);
+    expect(screen.queryByText(/Review required/)).toBeNull();
+  });
 });

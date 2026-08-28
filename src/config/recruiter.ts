@@ -306,4 +306,190 @@ export const recruiter = {
   },
 } as const;
 
+// ─── Post Quality Evaluation (Phase 5D) ──────────────────────────────────────
+// Deterministic post-quality evaluation. Weights follow the Phase 5D spec:
+// the eight dimensions sum to 100 and are single-sourced here — no hard-coding
+// in the evaluator.
+//
+// Recommendation thresholds:
+//   - strong        ≥ 80 and no critical warning
+//   - ready         ≥ 70 and no critical warning
+//   - needs_review  55–69, or any meaningful (non-critical) warning
+//   - do_not_publish < 55, or any CRITICAL warning (e.g. an unsupported
+//     personal achievement claim). Quality score never overrides evidence safety.
+
+export type RecruiterQualityConfig = {
+  /**
+   * Weight of each quality dimension. Sum = 100. Kept as the single source of
+   * truth so the evaluator and the UI can both render dimension weights.
+   */
+  readonly weights: Record<import("@/types/recruiter-quality").RecruiterQualityDimension, number>;
+  /** Score cutoffs for publish recommendations. */
+  readonly thresholds: {
+    readonly strong: number;
+    readonly ready: number;
+    readonly needsReview: number;
+  };
+  /**
+   * First-person achievement verbs. A post sentence that contains one of these
+   * with a first-person pronoun is a personal-achievement claim and needs a
+   * `USER_CONFIRMED` evidence entry backing it — otherwise it is CRITICAL.
+   */
+  readonly achievementVerbs: readonly string[];
+  /** Generic/open-ended opening phrases that lower clarity. */
+  readonly genericOpeners: readonly string[];
+  /** Honest-growth language that strengthens authenticity. */
+  readonly honestGrowthPhrases: readonly string[];
+  /** Popular-but-irrelevant hashtags that lower clarity. */
+  readonly irrelevantHashtags: readonly string[];
+  /** Technical terms used to measure concrete technical depth. */
+  readonly technicalTerms: readonly string[];
+};
+
+export const recruiterQuality = {
+  weights: {
+    recruiterRelevance: 20,
+    evidenceStrength: 20,
+    technicalDepth: 15,
+    practicalExperience: 15,
+    problemSolving: 10,
+    clarity: 10,
+    authenticity: 5,
+    learningGrowth: 5,
+  } as const satisfies Record<import("@/types/recruiter-quality").RecruiterQualityDimension, number>,
+
+  thresholds: {
+    strong: 80,
+    ready: 70,
+    needsReview: 55,
+  } as const,
+
+  achievementVerbs: [
+    "built",
+    "implemented",
+    "deployed",
+    "shipped",
+    "released",
+    "launched",
+    "created",
+    "developed",
+    "designed",
+    "integrated",
+    "configured",
+    "migrated",
+    "refactored",
+    "scaffolded",
+    "fixed",
+    "resolved",
+    "debugged",
+  ] as const,
+
+  genericOpeners: [
+    "another amazing day",
+    "what a day",
+    "super productive",
+    "amazing day of learning",
+    "today was a great day",
+    "incredible progress",
+    "crushed it",
+    "great day today",
+    "huge day",
+  ] as const,
+
+  honestGrowthPhrases: [
+    "still learning",
+    "more comfortable",
+    "getting better",
+    "first time",
+    "i was stuck",
+    "got stuck",
+    "doesn't work yet",
+    "a lot to learn",
+    "after a few failed attempts",
+    "i struggled",
+    "not perfect",
+    "it finally worked",
+    "slowly",
+  ] as const,
+
+  irrelevantHashtags: [
+    "#motivation",
+    "#inspiration",
+    "#success",
+    "#follow",
+    "#like",
+    "#trending",
+    "#viral",
+    "#instagood",
+    "#love",
+    "#fitness",
+    "#boss",
+    "#entrepreneur",
+    "#mindset",
+    "#grind",
+    "#hustle",
+  ] as const,
+
+  technicalTerms: [
+    "typescript",
+    "javascript",
+    "react",
+    "nextjs",
+    "next.js",
+    "supabase",
+    "postgresql",
+    "postgres",
+    "sql",
+    "prisma",
+    "authentication",
+    "authorization",
+    "oauth",
+    "jwt",
+    "rls",
+    "crud",
+    "rest",
+    "api",
+    "graphql",
+    "git",
+    "github",
+    "docker",
+    "ci/cd",
+    "css",
+    "html",
+    "webhook",
+    "json",
+    "http",
+    "caching",
+    "indexes",
+    "migrations",
+    "hooks",
+    "state",
+    "component",
+    "middleware",
+    "edge",
+    "serverless",
+    "cron",
+    "transactions",
+    "triggers",
+    "normalization",
+    "deployment",
+    "zod",
+    "validation",
+    "fetch",
+    "debugging",
+    "vitest",
+    "jest",
+    "node",
+    "express",
+    "privacy",
+    "security",
+    "encryption",
+    "hashing",
+    "schema",
+    "table",
+    "query",
+    "database",
+  ] as const,
+} as const satisfies RecruiterQualityConfig;
+
 export type RecruiterConfig = typeof recruiter;

@@ -150,6 +150,8 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 | `tokens_used` | `integer` | nullable | Token count (if available) |
 | `content_hash` | `text` | NOT NULL | SHA-256 hash for duplicate detection |
 | `opportunity_id` | `uuid` | nullable, FK → `content_opportunities(id)` ON DELETE SET NULL | Source content opportunity (Phase 5C) |
+| `recruiter_quality_score` | `integer` | nullable, check 0..100 | Deterministic post-quality score (Phase 5D) |
+| `recruiter_quality_report` | `jsonb` | nullable | Safe post-quality report (Phase 5D) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
 
@@ -162,6 +164,9 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 - `opportunity_id` (Phase 5C) is nullable so legacy posts are untouched; deleting an
   opportunity nulls the link via `ON DELETE SET NULL`. The `gp_opportunity_ownership`
   trigger enforces that an attached opportunity belongs to the same profile as the post.
+- `recruiter_quality_score` / `recruiter_quality_report` (Phase 5D) are nullable and
+  written only by the server-side `annotateGeneratedPostQuality`; the approve gate
+  re-evaluates server-side before approving.
 
 **Indexes:**
 - `idx_gp_profile_id` on `(profile_id)` — all posts for a user

@@ -7,6 +7,7 @@ type ApprovePostDialogProps = {
   onConfirm: () => void;
   onCancel: () => void;
   isApproving: boolean;
+  warning?: string | null;
 };
 
 export function ApprovePostDialog({
@@ -14,6 +15,7 @@ export function ApprovePostDialog({
   onConfirm,
   onCancel,
   isApproving,
+  warning,
 }: ApprovePostDialogProps) {
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -66,6 +68,15 @@ export function ApprovePostDialog({
         >
           Once approved, this post is ready for the next publishing step.
         </p>
+        {warning && (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+          >
+            <span className="font-semibold">Review required. </span>
+            {warning} The quality review recommends fixing this before approval.
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"

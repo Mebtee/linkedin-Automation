@@ -263,6 +263,40 @@ select * from (values
     case when exists (
       select 1 from pg_trigger
       where tgrelid = 'generated_posts'::regclass and tgname = 'gp_opportunity_ownership'
+    ) then 'PASS' else 'FAIL' end),
+
+  -- ─── Phase 5D — recruiter quality columns ─────────────────────────────────
+  ('65. generated_posts has recruiter_quality_score column',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts' and column_name = 'recruiter_quality_score'
+    ) then 'PASS' else 'FAIL' end),
+  ('65b. recruiter_quality_score is nullable (unassessed posts stay null)',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts'
+        and column_name = 'recruiter_quality_score' and is_nullable = 'YES'
+    ) then 'PASS' else 'FAIL' end),
+  ('65c. recruiter_quality_score has 0..100 check constraint',
+    case when exists (
+      select 1 from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      where c.conrelid = 'generated_posts'::regclass
+        and c.contype = 'c'
+        and a.attname = 'recruiter_quality_score'
+        and pg_get_constraintdef(c.oid) like '%0%'
+        and pg_get_constraintdef(c.oid) like '%100%'
+    ) then 'PASS' else 'FAIL' end),
+  ('66. generated_posts has recruiter_quality_report column',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts' and column_name = 'recruiter_quality_report'
+    ) then 'PASS' else 'FAIL' end),
+  ('66b. recruiter_quality_report is nullable (unassessed posts stay null)',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts'
+        and column_name = 'recruiter_quality_report' and is_nullable = 'YES'
     ) then 'PASS' else 'FAIL' end)
 ) as t(test, status);
 

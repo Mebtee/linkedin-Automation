@@ -1,14 +1,30 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { generatePostFromOpportunityAction } from "@/app/actions/content-opportunities";
+import {
+  generatePostFromOpportunityAction,
+  getPostQualityForOpportunityAction,
+} from "@/app/actions/content-opportunities";
 import { CONTENT_GOAL_LABELS, POST_TYPE_META } from "@/config/recruiter";
 import type { ContentOpportunityRow } from "@/types/content-opportunity";
+import type { GeneratedPostRow } from "@/types/generated-post";
+import type { PublishRecommendation } from "@/types/recruiter-quality";
+import {
+  recommendationLabel,
+  recommendationStyle,
+} from "@/components/posts/recruiter-quality-panel";
 
 type OpportunityGenerateCardProps = {
   opportunity: ContentOpportunityRow;
+};
+
+type PostSummary = {
+  id: string;
+  status: GeneratedPostRow["status"];
+  score: number | null;
+  recommendation: PublishRecommendation | null;
 };
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -50,8 +66,30 @@ export function OpportunityGenerateCard({ opportunity }: OpportunityGenerateCard
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState(false);
+  const [postSummary, setPostSummary] = useState<PostSummary | null>(null);
 
   const meta = POST_TYPE_META[opportunity.post_type];
+
+  // Phase 5D: when the opportunity already produced a draft, surface its
+  // quality summary so the reviewer can open (or regenerate) it from here.
+  const hasExistingPost =
+    opportunity.status === "generated" ||
+    opportunity.status === "approved" ||
+    opportunity.status === "published";
+
+  useEffect(() => {
+    if (!hasExistingPost) return;
+    let cancelled = false;
+    (async () => {
+      const result = await getPostQualityForOpportunityAction(opportunity.id);
+      if (!cancelled) {
+        setPostSummary(result.success ? result.post : null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [opportunity.id, hasExistingPost]);
 
   const rank = (confidence: string) => EVIDENCE_RANK[confidence] ?? 0;
 
@@ -149,16 +187,37 @@ export function OpportunityGenerateCard({ opportunity }: OpportunityGenerateCard
       )}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={generating}
-          className="rounded-lg bg-[#0F172A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1e293b] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-[#0F172A] dark:hover:bg-zinc-200"
-        >
-          {generating ? "Generating…" : "Generate Post"}
-        </button>
+        {hasExistingPost && postSummary ? (
+          <>
+            <a
+              href={`/posts/${postSummary.id}`}
+              className="rounded-lg bg-[#0F172A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1e293b] dark:bg-zinc-100 dark:text-[#0F172A] dark:hover:bg-zinc-200"
+            >
+              Open Draft
+            </a>
+            {postSummary.score !== null && postSummary.recommendation && (
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${recommendationStyle(postSummary.recommendation)}`}
+              >
+                Post quality {postSummary.score}/100 · {recommendationLabel(postSummary.recommendation)}
+              </span>
+            )}
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              Draft status: {postSummary.status}. You can still regenerate and edit it.
+            </span>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={generating}
+            className="rounded-lg bg-[#0F172A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1e293b] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-[#0F172A] dark:hover:bg-zinc-200"
+          >
+            {generating ? "Generating…" : "Generate Post"}
+          </button>
+        )}
 
-        {duplicate && (
+        {!hasExistingPost && duplicate && (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
             This opportunity already has a draft post. Refresh the Posts list to edit it.
           </span>

@@ -4,6 +4,7 @@ import { OpportunityGenerateCard } from "./opportunity-generate-card";
 
 vi.mock("@/app/actions/content-opportunities", () => ({
   generatePostFromOpportunityAction: vi.fn(),
+  getPostQualityForOpportunityAction: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -60,5 +61,29 @@ describe("OpportunityGenerateCard", () => {
   it("shows a Generate Post button for a selected opportunity", () => {
     render(<OpportunityGenerateCard opportunity={defaultOpportunity} />);
     expect(screen.getByText("Generate Post")).toBeDefined();
+  });
+
+  it("shows the draft's quality summary for a generated opportunity", async () => {
+    const { getPostQualityForOpportunityAction } = await import("@/app/actions/content-opportunities");
+    (getPostQualityForOpportunityAction as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      post: {
+        id: "post-1",
+        status: "draft",
+        score: 86,
+        recommendation: "strong",
+      },
+    });
+
+    render(
+      <OpportunityGenerateCard
+        opportunity={{ ...defaultOpportunity, status: "generated" as const }}
+      />,
+    );
+
+    expect(await screen.findByText(/Post quality 86\/100/)).toBeDefined();
+    expect(screen.getByText("Open Draft")).toBeDefined();
+    const link = screen.getByText("Open Draft").closest("a");
+    expect(link?.getAttribute("href")).toBe("/posts/post-1");
   });
 });

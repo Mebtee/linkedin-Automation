@@ -172,4 +172,25 @@ describe("PostActions", () => {
     const btn = screen.getByText("Publishing...");
     expect(btn).toHaveProperty("disabled", true);
   });
+
+  it("blocks the approve button when the quality gate disallows approval", () => {
+    render(
+      <PostActions
+        {...defaultProps}
+        approveBlocked={true}
+        approveBlockReason="This draft is not approved for publishing."
+      />,
+    );
+    const approve = screen.getByText("Approve Post");
+    expect(approve).toHaveProperty("disabled", true);
+    expect(
+      screen.getByText(/This draft is not approved for publishing/),
+    ).toBeDefined();
+  });
+
+  it("keeps approve enabled for needs_review posts (confirmation happens in the dialog)", () => {
+    render(<PostActions {...defaultProps} />);
+    const approve = screen.getByText("Approve Post");
+    expect(approve).toHaveProperty("disabled", false);
+  });
 });

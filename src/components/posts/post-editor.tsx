@@ -4,6 +4,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { GeneratedPostRow } from "@/types/generated-post";
+import type { ContentOpportunityRow } from "@/types/content-opportunity";
+import type { RecruiterQualityReport } from "@/types/recruiter-quality";
 import { PostStatusBadge } from "./post-status-badge";
 import { PostPreview } from "./post-preview";
 import { PostMetadata } from "./post-metadata";
@@ -13,11 +15,14 @@ import { SchedulePanel } from "./schedule-panel";
 import { ApprovePostDialog } from "./approve-post-dialog";
 import { DeletePostDialog } from "./delete-post-dialog";
 import { PublishDialog } from "./publish-dialog";
+import { RecruiterQualityPanel } from "./recruiter-quality-panel";
+import { OpportunitySummaryPanel } from "./opportunity-summary-panel";
 import {
   updatePost,
   approvePost,
   deletePost,
   regeneratePost,
+  regenerateOpportunityPost,
   publishPost,
 } from "@/app/actions/generated-posts";
 import {
@@ -31,6 +36,8 @@ import type { ScheduledPostRow } from "@/types/schedule";
 
 type PostEditorProps = {
   post: GeneratedPostRow;
+  quality?: RecruiterQualityReport | null;
+  opportunity?: ContentOpportunityRow | null;
 };
 
 type Toast = {
@@ -38,7 +45,7 @@ type Toast = {
   message: string;
 };
 
-export function PostEditor({ post }: PostEditorProps) {
+export function PostEditor({ post, quality: initialQuality, opportunity }: PostEditorProps) {
   const router = useRouter();
 
   // Form state
@@ -59,6 +66,9 @@ export function PostEditor({ post }: PostEditorProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [currentPost, setCurrentPost] = useState(post);
+  const [quality, setQuality] = useState<RecruiterQualityReport | null>(
+    initialQuality ?? null,
+  );
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [activeSchedule, setActiveSchedule] = useState<ScheduledPostRow | null>(
     null,
@@ -186,6 +196,7 @@ export function PostEditor({ post }: PostEditorProps) {
 
       if (result.success) {
         setCurrentPost(result.post);
+        if (result.quality !== undefined) setQuality(result.quality);
         showToast("success", "Post saved successfully.");
       } else {
         showToast("error", result.error.message);
@@ -252,23 +263,36 @@ export function PostEditor({ post }: PostEditorProps) {
 
   // ─── Regenerate ────────────────────────────────────────────────────────
 
+  const applyPost = useCallback(
+    (freshPost: GeneratedPostRow, freshQuality: RecruiterQualityReport | null) => {
+      setOpening(freshPost.opening);
+      setBody(freshPost.body);
+      setTakeaway(freshPost.takeaway);
+      setNextStep(freshPost.next_step);
+      setHashtagsRaw(freshPost.hashtags.join("\n"));
+      setCurrentPost(freshPost);
+      setQuality(freshQuality);
+    },
+    [],
+  );
+
   const handleRegenerate = useCallback(async () => {
     if (isRegenerating) return;
     setIsRegenerating(true);
 
     try {
-      const result = await regeneratePost(
-        currentPost.day_number,
-        currentPost.format,
-      );
+      // Opportunity-backed posts regenerate from the SAME opportunity +
+      // evidence (Phase 5D), producing a new candidate. Journal-only posts
+      // keep the classic day-based regeneration.
+      const result = currentPost.opportunity_id
+        ? await regenerateOpportunityPost(currentPost.opportunity_id)
+        : await regeneratePost(currentPost.day_number, currentPost.format);
+
       if (result.success) {
-        // Update form with new content
-        setOpening(result.post.opening);
-        setBody(result.post.body);
-        setTakeaway(result.post.takeaway);
-        setNextStep(result.post.next_step);
-        setHashtagsRaw(result.post.hashtags.join("\n"));
-        setCurrentPost(result.post);
+        applyPost(result.post, result.quality ?? null);
+        if (result.post.id !== currentPost.id) {
+          router.replace(`/posts/${result.post.id}`);
+        }
         showToast("success", "Post regenerated successfully.");
       } else {
         showToast("error", result.error.message);
@@ -278,7 +302,16 @@ export function PostEditor({ post }: PostEditorProps) {
     } finally {
       setIsRegenerating(false);
     }
-  }, [isRegenerating, currentPost.day_number, currentPost.format, showToast]);
+  }, [
+    isRegenerating,
+    currentPost.opportunity_id,
+    currentPost.day_number,
+    currentPost.format,
+    currentPost.id,
+    applyPost,
+    router,
+    showToast,
+  ]);
 
   // ─── Publish ───────────────────────────────────────────────────────────
 
@@ -403,6 +436,19 @@ export function PostEditor({ post }: PostEditorProps) {
 
   const isEditable =
     currentPost.status === "draft" || currentPost.status === "failed";
+
+  // Phase 5D approval gating. `do_not_publish` blocks approval outright; the
+  // server re-checks at approval time, so this is only the UX hint.
+  const approveBlockReason =
+    quality?.recommendation === "do_not_publish"
+      ? (quality.warnings.find((w) => w.startsWith("Critical:")) ??
+        "This draft is not approved for publishing.")
+      : null;
+  const approveWarning =
+    quality?.recommendation === "needs_review"
+      ? (quality.warnings.find((w) => w.startsWith("Critical:")) ??
+        "This draft is close, but the quality review flags a few areas.")
+      : null;
 
   return (
     <div className="space-y-6">
@@ -621,6 +667,12 @@ export function PostEditor({ post }: PostEditorProps) {
           />
           <ImageSection post={currentPost} />
           <PostMetadata post={currentPost} />
+          {currentPost.opportunity_id && (
+            <>
+              <OpportunitySummaryPanel opportunity={opportunity ?? null} />
+              <RecruiterQualityPanel report={quality} />
+            </>
+          )}
           {currentPost.status === "approved" && (
             <SchedulePanel
               existingSchedule={activeSchedule}
@@ -649,6 +701,8 @@ export function PostEditor({ post }: PostEditorProps) {
         onDelete={() => setDeleteOpen(true)}
         onPublish={() => setPublishOpen(true)}
         onConnectLinkedIn={handleConnectLinkedIn}
+        approveBlocked={approveBlockReason !== null}
+        approveBlockReason={approveBlockReason ?? undefined}
       />
 
       {/* Dialogs */}
@@ -657,6 +711,7 @@ export function PostEditor({ post }: PostEditorProps) {
         onConfirm={handleApprove}
         onCancel={() => setApproveOpen(false)}
         isApproving={isApproving}
+        warning={approveWarning}
       />
       <DeletePostDialog
         open={deleteOpen}

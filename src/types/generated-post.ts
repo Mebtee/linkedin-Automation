@@ -1,4 +1,5 @@
 import type { PostFormat } from "@/types/ai";
+import type { RecruiterQualityReport } from "@/types/recruiter-quality";
 
 // ─── Status ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,10 @@ export type GeneratedPostRow = {
   readonly tokens_used: number | null;
   readonly content_hash: string;
   readonly opportunity_id: string | null;
+  /** Deterministic post-quality score (Phase 5D). Null when not assessed. */
+  readonly recruiter_quality_score: number | null;
+  /** Safe post-quality report (Phase 5D). Null when not assessed. */
+  readonly recruiter_quality_report: RecruiterQualityReport | null;
   readonly linkedin_post_id: string | null;
   readonly published_at: string | null;
   readonly publish_error: string | null;

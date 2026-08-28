@@ -18,11 +18,20 @@ import type {
   UpdateGeneratedPostInput,
 } from "@/types/generated-post";
 import type { PostFormat } from "@/types/ai";
+import type { RecruiterQualityReport } from "@/types/recruiter-quality";
+import { evaluateApproveGate } from "@/services/recruiter/quality";
+import { evaluateRecruiterPostForSavedPost } from "@/services/recruiter/quality-service";
+import { regeneratePostFromOpportunity } from "@/services/recruiter/generation";
 
 // ─── Result Types ────────────────────────────────────────────────────────────
 
 export type PostActionResult =
-  | { success: true; post: GeneratedPostRow }
+  | {
+      success: true;
+      post: GeneratedPostRow;
+      /** Freshly reassessed report for opportunity-backed posts (Phase 5D). */
+      quality?: RecruiterQualityReport | null;
+    }
   | { success: false; error: { code: string; message: string } };
 
 export type PostListResult =
@@ -65,7 +74,16 @@ export async function updatePost(
 ): Promise<PostActionResult> {
   try {
     const post = await updateGeneratedPost(postId, input);
-    return { success: true, post };
+
+    // Phase 5D: edits to an opportunity-backed post are re-evaluated so the
+    // reviewer always sees the report for the current text, never a stale one.
+    let quality: RecruiterQualityReport | null = null;
+    if (post.opportunity_id) {
+      const evaluated = await evaluateRecruiterPostForSavedPost(postId);
+      quality = evaluated?.report ?? null;
+    }
+
+    return { success: true, post, quality };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update post.";
     const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "UNKNOWN";
@@ -75,8 +93,31 @@ export async function updatePost(
 
 export async function approvePost(postId: string): Promise<PostActionResult> {
   try {
-    const post = await changeGeneratedPostStatus(postId, "approved" as GeneratedPostStatus);
-    return { success: true, post };
+    const post = await getGeneratedPost(postId);
+    if (!post) {
+      return {
+        success: false,
+        error: { code: "POST_NOT_FOUND", message: "Post not found." },
+      };
+    }
+
+    // Phase 5D quality gate: recruiter (opportunity-backed) posts are always
+    // re-evaluated at approval time. A stored/tampered report is never trusted;
+    // any critical warning (e.g. unsupported personal claim) or score < 55
+    // blocks approval — the quality score can never override evidence safety.
+    if (post.opportunity_id) {
+      const evaluated = await evaluateRecruiterPostForSavedPost(postId);
+      const gate = evaluateApproveGate(evaluated?.report);
+      if (!gate.allowed) {
+        return {
+          success: false,
+          error: { code: gate.code, message: gate.message },
+        };
+      }
+    }
+
+    const approved = await changeGeneratedPostStatus(postId, "approved" as GeneratedPostStatus);
+    return { success: true, post: approved };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to approve post.";
     const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "UNKNOWN";
@@ -109,6 +150,35 @@ export async function regeneratePost(
     const message = err instanceof Error ? err.message : "Failed to regenerate post.";
     const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "GENERATION_FAILED";
     return { success: false, error: { code, message } };
+  }
+}
+
+/**
+ * Phase 5D regeneration of an opportunity-backed post: produces a NEW draft
+ * from the same opportunity + evidence + format and re-evaluates its quality.
+ * Intended to be triggered by the reviewer when the current candidate needs a
+ * different take — never by automation.
+ */
+export async function regenerateOpportunityPost(
+  opportunityId: string,
+): Promise<PostActionResult> {
+  try {
+    const result = await regeneratePostFromOpportunity(opportunityId);
+    if (!result.ok) {
+      return {
+        success: false,
+        error: { code: result.code, message: result.message },
+      };
+    }
+    let quality: RecruiterQualityReport | null = null;
+    if (result.post.opportunity_id) {
+      const evaluated = await evaluateRecruiterPostForSavedPost(result.post.id);
+      quality = evaluated?.report ?? null;
+    }
+    return { success: true, post: result.post, quality };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to regenerate post.";
+    return { success: false, error: { code: "GENERATION_FAILED", message } };
   }
 }
 

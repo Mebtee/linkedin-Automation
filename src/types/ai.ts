@@ -1,5 +1,6 @@
 import { AppError } from "@/lib/utils/errors";
 import type { RecruiterPostGenerationContext } from "./content-opportunity";
+import type { RecruiterContentBrief } from "./recruiter-quality";
 
 // ─── Post Format ────────────────────────────────────────────────────────────
 
@@ -91,6 +92,8 @@ export interface PostGenerationInput {
    * selected opportunity and may only use the supplied evidence.
    */
   readonly recruiter?: RecruiterPostGenerationContext;
+  /** Deterministic content brief (Phase 5D) when the post is opportunity-backed. */
+  readonly recruiterBrief?: RecruiterContentBrief;
 }
 
 // ─── Generated Post ─────────────────────────────────────────────────────────
