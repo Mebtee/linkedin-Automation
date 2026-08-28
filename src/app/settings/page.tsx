@@ -7,7 +7,18 @@ export const metadata: Metadata = {
   title: "Settings",
 };
 
-export default function SettingsPage() {
+type SettingsPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function SettingsPage({
+  searchParams,
+}: SettingsPageProps) {
+  const params = await searchParams;
+  const linkedinResult = Array.isArray(params.linkedin)
+    ? params.linkedin[0]
+    : params.linkedin ?? null;
+
   return (
     <>
       <PageHeader
@@ -15,7 +26,7 @@ export default function SettingsPage() {
         description="Manage integrations, branding and content preferences."
       />
       <div className="space-y-6">
-        <LinkedInConnectionCard />
+        <LinkedInConnectionCard initialCallbackResult={linkedinResult} />
       </div>
     </>
   );

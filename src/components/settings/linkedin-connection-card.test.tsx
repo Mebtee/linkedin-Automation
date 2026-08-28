@@ -189,16 +189,7 @@ describe("LinkedInConnectionCard", () => {
     });
   });
 
-  it("shows success message from URL callback params", async () => {
-    Object.defineProperty(window, "location", {
-      value: {
-        href: "http://localhost:3000/settings?linkedin=connected",
-        search: "?linkedin=connected",
-        replace: vi.fn(),
-      },
-      writable: true,
-    });
-
+  it("shows success message from initialCallbackResult", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: () =>
@@ -210,7 +201,7 @@ describe("LinkedInConnectionCard", () => {
         }),
     });
 
-    render(<LinkedInConnectionCard />);
+    render(<LinkedInConnectionCard initialCallbackResult="connected" />);
 
     await waitFor(() => {
       expect(
@@ -220,15 +211,6 @@ describe("LinkedInConnectionCard", () => {
   });
 
   it("shows error message for denied callback", async () => {
-    Object.defineProperty(window, "location", {
-      value: {
-        href: "http://localhost:3000/settings?linkedin=denied",
-        search: "?linkedin=denied",
-        replace: vi.fn(),
-      },
-      writable: true,
-    });
-
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -240,7 +222,7 @@ describe("LinkedInConnectionCard", () => {
         }),
     });
 
-    render(<LinkedInConnectionCard />);
+    render(<LinkedInConnectionCard initialCallbackResult="denied" />);
 
     await waitFor(() => {
       expect(
@@ -263,20 +245,7 @@ describe("LinkedInConnectionCard", () => {
 
     const user = userEvent.setup();
 
-    render(<LinkedInConnectionCard />);
-
-    // Inject a message via the component state by simulating a callback
-    Object.defineProperty(window, "location", {
-      value: {
-        href: "http://localhost:3000/settings?linkedin=connected",
-        search: "?linkedin=connected",
-        replace: vi.fn(),
-      },
-      writable: true,
-    });
-
-    // Re-render with the message
-    const { unmount } = render(<LinkedInConnectionCard />);
+    render(<LinkedInConnectionCard initialCallbackResult="connected" />);
 
     await waitFor(() => {
       expect(screen.getByText("LinkedIn account connected successfully.")).toBeTruthy();
@@ -288,7 +257,5 @@ describe("LinkedInConnectionCard", () => {
     await waitFor(() => {
       expect(screen.queryByText("LinkedIn account connected successfully.")).toBeNull();
     });
-
-    unmount();
   });
 });

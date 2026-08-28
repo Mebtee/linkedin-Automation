@@ -37,30 +37,38 @@ const CALLBACK_MESSAGES: Record<string, string> = {
   missing_params: "Missing authorization parameters. Please try again.",
 };
 
-function readCallbackMessage(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  const result = params.get("linkedin");
-  if (!result) return null;
-  return CALLBACK_MESSAGES[result] ?? "Unknown result.";
-}
+type LinkedInConnectionCardProps = {
+  /** OAuth callback result (e.g. "connected") read from the server-rendered
+   *  `?linkedin=...` query param. Passed from the page so no client-only
+   *  `window` read happens during render (SSR-safe, no hydration mismatch). */
+  initialCallbackResult?: string | null;
+};
 
-export function LinkedInConnectionCard() {
+export function LinkedInConnectionCard({
+  initialCallbackResult = null,
+}: LinkedInConnectionCardProps) {
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(() => readCallbackMessage());
+  const [message, setMessage] = useState<string | null>(() =>
+    initialCallbackResult
+      ? (CALLBACK_MESSAGES[initialCallbackResult] ?? "Unknown result.")
+      : null,
+  );
 
-  // Strip the transient ?linkedin=... query param after reading it. Must run
-  // in an effect (not during render) because history.replaceState triggers a
-  // Next.js Router update — doing it while rendering would warn "Cannot
-  // update a component (`Router`) while rendering a different component".
+  // Strip the transient ?linkedin=... query param from the URL after mount.
+  // Client-only: history.replaceState has no server equivalent. No setState is
+  // called here, so this cannot trigger cascading renders, and it runs after
+  // render so it never updates the Next.js Router mid-render.
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has("linkedin")) return;
+    if (typeof window === "undefined") return;
 
     const url = new URL(window.location.href);
+    if (!url.searchParams.has("linkedin")) return;
+
     url.searchParams.delete("linkedin");
     window.history.replaceState({}, "", url.toString());
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
