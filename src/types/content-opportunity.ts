@@ -186,3 +186,61 @@ export type ContentOpportunity = {
   readonly recommendedFormat: PostFormat | null;
   readonly status: ContentOpportunityStatus;
 };
+
+// ─── Persistence Row & Inputs (Phase 5B) ─────────────────────────────────────
+
+/** Database row for the `content_opportunities` table. */
+export type ContentOpportunityRow = {
+  id: string;
+  profile_id: string;
+  source_type: ContentOpportunitySourceKind;
+  source_id: string | null;
+  day_number: number | null;
+  module_number: number | null;
+  post_type: PostType;
+  content_goal: ContentGoal;
+  title: string;
+  summary: string | null;
+  evidence: ContentOpportunityEvidenceReference[];
+  recruiter_score: number;
+  recruiter_score_breakdown: RecruiterScore | null;
+  selection_reason: string | null;
+  status: ContentOpportunityStatus;
+  dedup_key: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateContentOpportunityInput = {
+  readonly source_type: ContentOpportunitySourceKind;
+  readonly source_id: string | null;
+  readonly day_number: number | null;
+  readonly module_number: number | null;
+  readonly post_type: PostType;
+  readonly content_goal: ContentGoal;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly evidence: readonly ContentOpportunityEvidenceReference[];
+  readonly recruiter_score: number;
+  readonly recruiter_score_breakdown: RecruiterScore | null;
+  readonly selection_reason: string | null;
+  readonly status?: ContentOpportunityStatus;
+  readonly dedup_key?: string;
+};
+
+export type UpdateContentOpportunityInput = {
+  readonly status?: ContentOpportunityStatus;
+  readonly selection_reason?: string | null;
+};
+
+export const ALLOWED_OPPORTUNITY_STATUS_TRANSITIONS: Record<
+  ContentOpportunityStatus,
+  readonly ContentOpportunityStatus[]
+> = {
+  candidate: ["selected", "generated", "rejected"],
+  selected: ["generated", "rejected"],
+  generated: ["approved", "rejected"],
+  approved: ["published"],
+  published: [],
+  rejected: [],
+};

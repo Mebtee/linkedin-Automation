@@ -293,6 +293,40 @@ Extracted text per PDF page; enables page-precise evidence citations.
 
 ---
 
+### `content_opportunities` (Phase 5B)
+
+Recruiter-focused content opportunities derived from **confirmed** evidence. Rows are
+deterministic candidates (`candidate` → `selected` → later phases generate the actual
+post text into `generated_posts`). Creating a row here **never** publishes anything.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | **PK**, default `gen_random_uuid()` | Row ID |
+| `profile_id` | `uuid` | NOT NULL, FK → `profiles(id)` ON DELETE CASCADE | Owner user |
+| `source_type` | `text` | NOT NULL, CHECK in (`course-material`,`journal`,`project-evidence`) | Where the evidence came from |
+| `source_id` | `uuid` | nullable | Source journal entry / course material id (no FK — sources vary) |
+| `day_number` | `integer` | nullable, CHECK `1–105` | Curriculum day the evidence belongs to |
+| `module_number` | `integer` | nullable | Curriculum module number |
+| `post_type` | `text` | NOT NULL, CHECK in the 12 Phase 5A post types | `PROJECT_SHOWCASE`, `PROBLEM_SOLUTION`, … `CAREER_PROGRESS` |
+| `content_goal` | `text` | NOT NULL, default `'GET_RECRUITER_ATTENTION'`, CHECK in the 6 goals | Goal the row was scored against |
+| `title` | `text` | NOT NULL | Concise opportunity title |
+| `summary` | `text` | nullable | Short evidence-backed summary |
+| `evidence` | `jsonb` | NOT NULL, default `'[]'` | `[{ field, pageNumbers, confidence }]` references — no hashes, no secrets |
+| `recruiter_score` | `numeric` | NOT NULL, default `0`, CHECK `0–100` | Deterministic Phase 5A score |
+| `recruiter_score_breakdown` | `jsonb` | NOT NULL, default `'{}'` | Stored `RecruiterScore` — never chain-of-thought |
+| `selection_reason` | `text` | nullable | Concise public reason set when selected as best |
+| `status` | `text` | NOT NULL, default `'candidate'`, CHECK in the 6 statuses | Lifecycle |
+| `dedup_key` | `text` | nullable | Deterministic key; upserts skip existing `(profile_id, dedup_key)` |
+
+**Constraints:**
+- `(profile_id, dedup_key)` is **UNIQUE** — re-generating a day never duplicates rows.
+- `status` lifecycle: `candidate` → `selected` → `generated` → `approved` → `published`; any non-published state may be `rejected`. Enforced in the service layer (`ALLOWED_OPPORTUNITY_STATUS_TRANSITIONS`).
+
+**Indexes:**
+- `idx_co_profile_id`, `idx_co_profile_status` on `(profile_id, status)`, `idx_co_profile_score` on `(profile_id, recruiter_score)`, `idx_co_source_id`, `idx_co_day_number`.
+
+---
+
 ## Relationships
 
 ```
@@ -349,6 +383,11 @@ profiles
       │
       └── journal_proposal → feeds daily_learning_entries via existing
           saveJournal()/submitJournal() actions (no FK — proposals are data)
+
+profiles ── 1:N (profile_id FK) ──► content_opportunities
+  ├── source: daily_learning_entries (journal path, confirmed)
+  ├── source: course_materials (proposal path, unconfirmed → learning-only)
+  └── feeds: generated_posts in later phases (no FK yet)
 ```
 
 - A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
@@ -364,6 +403,7 @@ profiles
 - A **media_asset** references one **generated_post** (via `generated_post_id` FK) and one **profile** (via `profile_id` FK).
 - A **scheduled_post** references one **generated_post** (via `post_id` FK) and one **profile** (via `profile_id` FK).
 - A **profile** has many **course_materials** (via `profile_id` FK); a course material has many **course_material_pages** (via `course_material_id` FK).
+- A **profile** has many **content_opportunities** (via `profile_id` FK), sourced from `daily_learning_entries` (journal path) or `course_materials` (proposal path).
 - `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
 - `ON DELETE RESTRICT` on `daily_learning_entries.day_number` prevents deleting a curriculum day that has journal entries.
 - `ON DELETE RESTRICT` on `generated_posts.day_number` prevents deleting a curriculum day that has generated posts.
@@ -384,6 +424,7 @@ profiles
 | `linkedin_connections_set_updated_at` | `linkedin_connections` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `scheduled_posts_set_updated_at` | `scheduled_posts` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `course_materials_set_updated_at` | `course_materials` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `content_opportunities_set_updated_at` | `content_opportunities` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 
 The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
 
@@ -403,6 +444,7 @@ All ten tables have RLS **enabled** with restrictive policies:
 - **`scheduled_posts`**: Owner-only access (`auth.uid() = profile_id`) for all operations. The cron publisher uses the service-role key to bypass RLS.
 - **`course_materials`**: Owner-only access (`auth.uid() = profile_id`) for all operations.
 - **`course_material_pages`**: Owner-only via join (`EXISTS (SELECT 1 FROM course_materials cm WHERE cm.id = course_material_id AND cm.profile_id = auth.uid())`) for SELECT/INSERT/UPDATE/DELETE.
+- **`content_opportunities`**: Owner-only access (`auth.uid() = profile_id`) for all operations (`co_select_own` / `co_insert_own` / `co_update_own` / `co_delete_own`).
 - **Storage buckets**: `post-images` and `course-materials` are **private**; access goes through authenticated server routes. The `course-materials` bucket additionally restricts object paths to `{profile_id}/…` prefixes.
 - **Anonymous users**: No access to any table.
 - **Service-role**: Bypasses all RLS (server-side only).
@@ -464,6 +506,12 @@ All ten tables have RLS **enabled** with restrictive policies:
 23. **scheduled_posts uses a partial unique index** — only `status = 'scheduled'` rows are unique per `post_id`, allowing a post to be rescheduled after cancellation or failure.
 
 24. **schedule_status enum** — typed lifecycle (`scheduled` → `publishing` → `published` | `failed`, or `scheduled` → `cancelled`) keeps the state machine explicit at the database level.
+
+25. **Content opportunities are evidence-traceable, never fabricated** — every `content_opportunities` row stores `evidence` references (`field` + PDF `pageNumbers` + `confidence`). Personal post types are only built from `USER_CONFIRMED` journal evidence; course proposals can only produce learning post types (`TECHNICAL_LESSON` / `LEARNING_MILESTONE`).
+
+26. **Deterministic scoring, stored once** — `recruiter_score` / `recruiter_score_breakdown` are written at creation time from Phase 5A's deterministic scorer. Re-selection ranks stored scores; it never re-runs the scorer and never stores chain-of-thought.
+
+27. **Idempotent regeneration via `dedup_key`** — the builder derives a stable hash (`source_type::day::post_type::slug(title)`) and upserts with `ignoreDuplicates`, so generating a day twice never duplicates rows.
 
 ---
 

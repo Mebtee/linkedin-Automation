@@ -1,0 +1,166 @@
+"use server";
+
+import type {
+  ContentGoal,
+  ContentOpportunityRow,
+  ContentOpportunitySourceKind,
+  ContentOpportunityStatus,
+} from "@/types/content-opportunity";
+import {
+  deleteContentOpportunity,
+  getContentOpportunity,
+  listContentOpportunities,
+  updateContentOpportunityStatus,
+} from "@/services/recruiter/persistence";
+import {
+  generateContentOpportunitiesForCourseMaterial,
+  generateContentOpportunitiesForDay,
+  selectBestContentOpportunity,
+} from "@/services/recruiter";
+
+// ─── Content Opportunity Server Actions (Phase 5B) ───────────────────────────
+// Thin wrappers: business logic lives in src/services/recruiter/.
+// Actions return plain result objects and never leak internals (no tokens,
+// no chain-of-thought, no private evidence content).
+
+export type GenerateOpportunitiesResult =
+  | { success: true; opportunities: ContentOpportunityRow[]; count: number }
+  | { success: false; error: string };
+
+export async function generateContentOpportunitiesForDayAction(options: {
+  readonly dayNumber: number;
+  readonly goal?: ContentGoal;
+}): Promise<GenerateOpportunitiesResult> {
+  try {
+    const opportunities = await generateContentOpportunitiesForDay(options);
+    return { success: true, opportunities, count: opportunities.length };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not generate content opportunities.",
+    };
+  }
+}
+
+export async function generateContentOpportunitiesForCourseMaterialAction(options: {
+  readonly courseMaterialId: string;
+  readonly goal?: ContentGoal;
+}): Promise<GenerateOpportunitiesResult> {
+  try {
+    const opportunities = await generateContentOpportunitiesForCourseMaterial(options);
+    return { success: true, opportunities, count: opportunities.length };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not generate content opportunities.",
+    };
+  }
+}
+
+export type ListOpportunitiesResult =
+  | { success: true; opportunities: ContentOpportunityRow[] }
+  | { success: false; error: string };
+
+export async function listContentOpportunitiesAction(options?: {
+  readonly status?: ContentOpportunityStatus;
+  readonly sourceType?: ContentOpportunitySourceKind;
+  readonly dayNumber?: number;
+  readonly limit?: number;
+}): Promise<ListOpportunitiesResult> {
+  try {
+    const opportunities = await listContentOpportunities(options);
+    return { success: true, opportunities };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not load content opportunities.",
+    };
+  }
+}
+
+export type GetOpportunityResult =
+  | { success: true; opportunity: ContentOpportunityRow }
+  | { success: false; error: string };
+
+export async function getContentOpportunityAction(
+  opportunityId: string,
+): Promise<GetOpportunityResult> {
+  try {
+    const opportunity = await getContentOpportunity(opportunityId);
+    if (!opportunity) {
+      return { success: false, error: "Content opportunity not found." };
+    }
+    return { success: true, opportunity };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not load the content opportunity.",
+    };
+  }
+}
+
+export type SelectBestOpportunityResult =
+  | {
+      success: true;
+      opportunity: ContentOpportunityRow | null;
+      reason: string | null;
+      diversityAdjusted: boolean;
+    }
+  | { success: false; error: string };
+
+export async function selectBestContentOpportunityAction(): Promise<SelectBestOpportunityResult> {
+  try {
+    const best = await selectBestContentOpportunity();
+    return {
+      success: true,
+      opportunity: best?.row ?? null,
+      reason: best?.reason ?? null,
+      diversityAdjusted: best?.diversityAdjusted ?? false,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not select the best content opportunity.",
+    };
+  }
+}
+
+export type UpdateOpportunityStatusResult =
+  | { success: true; opportunity: ContentOpportunityRow }
+  | { success: false; error: string };
+
+export async function updateContentOpportunityStatusAction(options: {
+  readonly opportunityId: string;
+  readonly status: ContentOpportunityStatus;
+  readonly selectionReason?: string | null;
+}): Promise<UpdateOpportunityStatusResult> {
+  try {
+    const opportunity = await updateContentOpportunityStatus(
+      options.opportunityId,
+      options.status,
+      options.selectionReason,
+    );
+    return { success: true, opportunity };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not update the content opportunity.",
+    };
+  }
+}
+
+export type DeleteOpportunityResult = { success: boolean; error?: string };
+
+export async function deleteContentOpportunityAction(
+  opportunityId: string,
+): Promise<DeleteOpportunityResult> {
+  try {
+    await deleteContentOpportunity(opportunityId);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not delete the content opportunity.",
+    };
+  }
+}

@@ -10,6 +10,14 @@ pre-filled automatically from an uploaded course PDF via the Phase 3I/3J pipelin
 Both paths converge on the same `submitJournal()` → generation flow; nothing in
 this document's pipeline changed.
 
+> **Phase 5B (recruiter content opportunities)** adds a *selection layer* **before**
+> post generation, but it does **not** modify the generation pipeline documented here.
+> It deterministically builds candidates (12 post types, scored 0–100) from
+> confirmed evidence into the `content_opportunities` table (`candidate` status).
+> Only after human selection (`selected`) do later phases feed the strongest
+> opportunity into this same `generated_posts` pipeline. See
+> [RECRUITER_CONTENT.md](RECRUITER_CONTENT.md).
+
 ## Architecture
 
 ```
