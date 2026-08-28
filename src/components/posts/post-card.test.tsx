@@ -33,6 +33,17 @@ const mockPost = {
   updated_at: "2026-08-17T10:00:00Z",
 };
 
+const qualityDimensions = {
+  evidenceStrength: 95,
+  practicalExperience: 90,
+  technicalDepth: 75,
+  problemSolving: 80,
+  clarity: 85,
+  authenticity: 90,
+  learningGrowth: 85,
+  recruiterRelevance: 88,
+};
+
 describe("PostCard", () => {
   it("renders day number", () => {
     render(<PostCard post={mockPost} />);
@@ -88,5 +99,53 @@ describe("PostCard", () => {
     };
     render(<PostCard post={postWithManyHashtags} />);
     expect(screen.getByText("+2")).toBeDefined();
+  });
+
+  it("shows the quality chip for an assessed opportunity post", () => {
+    const assessed = {
+      ...mockPost,
+      recruiter_quality_score: 86,
+      recruiter_quality_report: {
+        score: 86,
+        recommendation: "strong" as const,
+        dimensions: qualityDimensions,
+        strengths: [],
+        improvements: [],
+        warnings: [],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      },
+    };
+    render(<PostCard post={assessed} />);
+    expect(screen.getByText(/Post quality 86\/100/)).toBeDefined();
+  });
+
+  it("flags a do_not_publish post as not approved for publishing", () => {
+    const blocked = {
+      ...mockPost,
+      recruiter_quality_score: 50,
+      recruiter_quality_report: {
+        score: 50,
+        recommendation: "do_not_publish" as const,
+        dimensions: qualityDimensions,
+        strengths: [],
+        improvements: [],
+        warnings: ["Critical: the post makes a personal achievement claim."],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      },
+    };
+    render(<PostCard post={blocked} />);
+    expect(screen.getByText("Not approved for publishing")).toBeDefined();
+  });
+
+  it("shows Published to LinkedIn metadata for published posts", () => {
+    const published = {
+      ...mockPost,
+      status: "published" as const,
+      linkedin_post_id: "urn:li:share:123",
+      published_at: "2026-08-28T10:00:00Z",
+    };
+    render(<PostCard post={published} />);
+    expect(screen.getAllByText(/Published to LinkedIn/).length).toBeGreaterThan(0);
+    expect(screen.getByText("View").getAttribute("href")).toBe("/posts/post-1");
   });
 });

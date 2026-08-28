@@ -22,6 +22,7 @@ vi.mock("@/services/ai/generation", () => ({
 
 vi.mock("@/services/linkedin", () => ({
   getAccessToken: vi.fn(),
+  getConnectionStatus: vi.fn(),
   buildMemberUrn: (sub: string) => `urn:li:person:${sub}`,
   publishToLinkedIn: vi.fn(),
   loadPostImage: vi.fn(),
@@ -287,6 +288,27 @@ describe("Post Server Actions", () => {
       expect(changeGeneratedPostStatus).not.toHaveBeenCalled();
     });
 
+    it("syncs the linked opportunity to approved when an opportunity post is approved", async () => {
+      const opportunityPost = { ...mockPost, status: "generated" as const, opportunity_id: "op-1" };
+      const approvedPost = { ...opportunityPost, status: "approved" as const };
+      (getGeneratedPost as Mock).mockResolvedValue(opportunityPost);
+      (changeGeneratedPostStatus as Mock).mockResolvedValue(approvedPost);
+
+      const qualityService = await import("@/services/recruiter/quality-service");
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue(null);
+
+      const persistence = await import("@/services/recruiter/persistence");
+      const syncSpy = vi.spyOn(persistence, "updateContentOpportunityStatus");
+      syncSpy.mockRejectedValue(new Error("best-effort"));
+
+      const result = await approvePost("post-1");
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.post.status).toBe("approved");
+      expect(syncSpy).toHaveBeenCalledWith("op-1", "approved");
+    });
+
     it("returns error on invalid transition", async () => {
       (getGeneratedPost as Mock).mockResolvedValue(mockPost);
       (changeGeneratedPostStatus as Mock).mockRejectedValue(
@@ -380,6 +402,22 @@ describe("Post Server Actions", () => {
       (createWriteClient as Mock).mockResolvedValue(mockSupabase);
     });
 
+    it("returns success (existing result) when the post is already published", async () => {
+      const publishedPost = { ...mockPost, status: "published" };
+      (getGeneratedPost as Mock).mockResolvedValue(publishedPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.post.status).toBe("published");
+      }
+      // Idempotency: no LinkedIn call, no status write.
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(publishToLinkedIn).not.toHaveBeenCalled();
+      expect(updatePublishState).not.toHaveBeenCalled();
+    });
+
     it("returns success when post is published", async () => {
       const approvedPost = { ...mockPost, status: "approved" };
       (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
@@ -471,16 +509,34 @@ describe("Post Server Actions", () => {
       }
     });
 
-    it("returns LINKEDIN_NOT_CONNECTED when no token", async () => {
+    it("returns LINKEDIN_NOT_CONNECTED when no connection exists", async () => {
       const approvedPost = { ...mockPost, status: "approved" };
       (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
       (getAccessToken as Mock).mockResolvedValue(null);
+      const { getConnectionStatus } = await import("@/services/linkedin");
+      (getConnectionStatus as Mock).mockResolvedValue({ status: "disconnected" });
 
       const result = await publishPost("post-1");
 
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error.code).toBe("LINKEDIN_NOT_CONNECTED");
+      }
+    });
+
+    it("returns LINKEDIN_TOKEN_EXPIRED when the connection is expired", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue(null);
+      const { getConnectionStatus } = await import("@/services/linkedin");
+      (getConnectionStatus as Mock).mockResolvedValue({ status: "expired" });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("LINKEDIN_TOKEN_EXPIRED");
+        expect(result.error.message).toMatch(/expired/i);
       }
     });
 
@@ -510,22 +566,165 @@ describe("Post Server Actions", () => {
       });
       (publishToLinkedIn as Mock).mockResolvedValue({
         success: false,
-        error: "INSUFFICIENT_SCOPE",
+        error: "Network error: fetch failed",
       });
       (updatePublishState as Mock).mockResolvedValue({
         ...approvedPost,
-        publish_error: "INSUFFICIENT_SCOPE",
+        publish_error:
+          "Unable to reach LinkedIn. Check your connection and try again.",
       });
 
       const result = await publishPost("post-1");
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.code).toBe("PUBLISH_FAILED");
+        expect(result.error.code).toBe("LINKEDIN_UNREACHABLE");
       }
+      // The safe, display-ready message is persisted — never the raw provider
+      // error or any token material.
       expect(updatePublishState).toHaveBeenCalledWith("post-1", {
-        publish_error: "INSUFFICIENT_SCOPE",
+        publish_error:
+          "Unable to reach LinkedIn. Check your connection and try again.",
       });
+    });
+
+    it("maps a 401 to a token-invalid message", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+        linkedinSub: "li-sub-user",
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: false,
+        error: "LinkedIn API error (401): invalid token",
+      });
+      (updatePublishState as Mock).mockResolvedValue(approvedPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("LINKEDIN_TOKEN_INVALID");
+        expect(result.error.message).toMatch(/reconnect/i);
+      }
+    });
+
+    it("maps a 429 to a rate-limit message", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+        linkedinSub: "li-sub-user",
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: false,
+        error: "LinkedIn API error (429): too many requests",
+      });
+      (updatePublishState as Mock).mockResolvedValue(approvedPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("LINKEDIN_RATE_LIMITED");
+      }
+    });
+
+    it("maps a 5xx to an unavailable message", async () => {
+      const approvedPost = { ...mockPost, status: "approved" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+        linkedinSub: "li-sub-user",
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: false,
+        error: "LinkedIn API error (503): service unavailable",
+      });
+      (updatePublishState as Mock).mockResolvedValue(approvedPost);
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("LINKEDIN_UNAVAILABLE");
+      }
+    });
+
+    it("blocks publishing an opportunity post whose re-evaluated quality is do_not_publish", async () => {
+      const doNotPublishReport = {
+        score: 50,
+        recommendation: "do_not_publish" as const,
+        dimensions: {
+          recruiterRelevance: 60,
+          evidenceStrength: 40,
+          technicalDepth: 50,
+          practicalExperience: 40,
+          problemSolving: 50,
+          clarity: 70,
+          authenticity: 70,
+          learningGrowth: 50,
+        },
+        strengths: [],
+        improvements: [],
+        warnings: ["Critical: the post makes a personal achievement claim."],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      };
+      const approvedPost = {
+        ...mockPost,
+        status: "approved" as const,
+        opportunity_id: "op-1",
+        recruiter_quality_score: 50,
+        recruiter_quality_report: doNotPublishReport,
+      };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+
+      const qualityService = await import("@/services/recruiter/quality-service");
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue({ post: approvedPost, report: doNotPublishReport });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("QUALITY_GATE_BLOCKED");
+      }
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(publishToLinkedIn).not.toHaveBeenCalled();
+    });
+
+    it("syncs the linked opportunity to published after a successful publish", async () => {
+      const approvedPost = { ...mockPost, status: "approved" as const, opportunity_id: "op-1" };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+      const qualityService = await import("@/services/recruiter/quality-service");
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue(null);
+      (getAccessToken as Mock).mockResolvedValue({
+        token: "test-token",
+        hasPublishScope: true,
+        linkedinSub: "li-sub-user",
+      });
+      (publishToLinkedIn as Mock).mockResolvedValue({
+        success: true,
+        linkedinPostId: "urn:li:share:777",
+      });
+      (updatePublishState as Mock).mockResolvedValue({
+        ...approvedPost,
+        status: "published" as const,
+        linkedin_post_id: "urn:li:share:777",
+      });
+      const persistence = await import("@/services/recruiter/persistence");
+      const syncSpy = vi.spyOn(persistence, "updateContentOpportunityStatus");
+      syncSpy.mockRejectedValue(new Error("best-effort"));
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(true);
+      expect(syncSpy).toHaveBeenCalledWith("op-1", "published");
     });
   });
 });

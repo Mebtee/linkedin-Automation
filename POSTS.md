@@ -1,4 +1,4 @@
-# Generated Posts — Phase 3B
+# Generated Posts — Phases 3B & 5E
 
 ## Purpose
 
@@ -20,6 +20,14 @@ this document's pipeline changed.
 > persisted post stores `opportunity_id`. Generation never approves or publishes.
 > See [RECRUITER_CONTENT.md](RECRUITER_CONTENT.md).
 
+> **Phase 5E (workflow, approval UX & manual LinkedIn publishing)** completes the
+> journey: a polished `/opportunities` dashboard ("Recommended for You", state-driven
+> per-step cards), a deterministic post-quality review in the editor
+> (`PostPreview` shows a "Draft — Not Published" badge), a manual Publish dialog on
+> approved posts, idempotent publishing with safe error mapping, and automatic
+> opportunity status sync (`approved` on approval, `published` on publish).
+> Publishing is **never automatic** — only the user's explicit action publishes.
+
 ## Architecture
 
 ```
@@ -33,7 +41,7 @@ ProviderResult (post + image metadata)
      ↓
 generated_posts (Phase 3B persistence)
      ↓
-Future: Post Editor → Approval → LinkedIn Publishing
+Post Editor → Approval → Manual LinkedIn Publishing (Phases 3D/5E)
 ```
 
 ## Database Schema
@@ -65,6 +73,9 @@ Future: Post Editor → Approval → LinkedIn Publishing
 | `opportunity_id` | `uuid` | nullable, FK → `content_opportunities(id)` ON DELETE SET NULL | Linked Phase 5B/5C content opportunity |
 | `recruiter_quality_score` | `integer` | nullable, check 0..100 | Deterministic post-quality score (Phase 5D) |
 | `recruiter_quality_report` | `jsonb` | nullable | Safe post-quality report (Phase 5D) |
+| `linkedin_post_id` | `text` | nullable | LinkedIn-assigned identifier (`urn:li:share:…`) after a successful publish |
+| `published_at` | `timestamptz` | nullable | Timestamp of the successful manual/scheduled publish |
+| `publish_error` | `text` | nullable | Display-safe error details from the last failed publish (cleared on success) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | Creation timestamp |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | Last update timestamp |
 
@@ -269,8 +280,8 @@ const result = await generatePost({ dayNumber: 1 });
 - ✅ Post generation service (Phase 3C)
 - ✅ Post editor UI (Phase 3D)
 - ✅ Image generation (Phase 3E)
-- ❌ LinkedIn publishing
-- ❌ Post scheduling
+- ✅ LinkedIn publishing — **manual** (Phase 5E), via `publishPost` + `PublishDialog`
+- ✅ Post scheduling (Phase 4, cron publisher)
 - ❌ Content analytics
 
 ## Post Editor UI (Phase 3D)
@@ -296,6 +307,7 @@ const result = await generatePost({ dayNumber: 1 });
 | `ImageSection` | `image-section.tsx` | Image preview, generate, regenerate, download |
 | `ApprovePostDialog` | `approve-post-dialog.tsx` | Approval confirmation |
 | `DeletePostDialog` | `delete-post-dialog.tsx` | Deletion confirmation |
+| `PublishDialog` | `publish-dialog.tsx` | Manual publication confirmation (Phase 5E), shown when a post is approved |
 
 ### Server Actions
 
@@ -310,6 +322,46 @@ const result = await generatePost({ dayNumber: 1 });
 | `regenerateOpportunityPost(opportunityId)` | User-triggered regeneration of an opportunity post (Phase 5D) |
 | `deletePost(postId)` | Delete draft/failed posts |
 | `regeneratePost(dayNumber, format?)` | Generate new post for same day |
+| `publishPost(postId)` | Manually publish an approved post to LinkedIn (Phase 5E) |
+
+### Manual Publishing (Phase 5E)
+
+Publishing an approved post is a deliberate, user-triggered action — there is no
+automatic publishing path. `publishPost(postId)` verifies, on the server:
+
+1. The post exists and belongs to the authenticated user.
+2. The post is `approved` (an unapproved draft is rejected with `INVALID_STATUS`).
+3. An active LinkedIn connection exists for the user (token not expired).
+4. The connection grants the publish scope `w_member_social` (`INSUFFICIENT_SCOPE`).
+5. The post is **not already published** — publishing again is **idempotent** and
+   simply returns the existing published result with no new LinkedIn call.
+6. For opportunity-backed posts, the Phase 5D quality gate is **re-checked** at
+   publish time; a `do_not_publish` finding blocks with `QUALITY_GATE_BLOCKED`.
+7. The LinkedIn UGC API call succeeds; the result stores `linkedin_post_id`,
+   `published_at`, and clears `publish_error`.
+
+Failures return a **display-safe, mapped error** (never a raw provider error):
+
+| Code | Meaning |
+|------|---------|
+| `LINKEDIN_TOKEN_INVALID` | 401 / login failure — "Your LinkedIn connection is no longer valid. Please reconnect." |
+| `LINKEDIN_TOKEN_EXPIRED` | Stored token is past `expires_at` — prompt to reconnect. |
+| `INSUFFICIENT_SCOPE` | Missing `w_member_social` — reconnect with publishing permissions. |
+| `LINKEDIN_RATE_LIMITED` | 429 — retry later. |
+| `LINKEDIN_UNAVAILABLE` / `LINKEDIN_UNREACHABLE` | 5xx / network failure. |
+| `PUBLISH_FAILED` | Any other failure |
+
+Only the mapped message is stored in `publish_error`. On success the linked
+`content_opportunity` is advanced to `published` (best-effort, owner-scoped).
+
+### Status-Based Actions
+
+| Status | Edit | Save | Approve | Publish | Regenerate | Delete |
+|--------|------|------|---------|---------|------------|--------|
+| Draft | Yes | Yes | Yes | No | Yes | Yes |
+| Failed | Yes | Yes | No | No | Yes | Yes |
+| Approved | No | No | No | Yes (Publish dialog) | No | No |
+| Published | No | No | No | No | No | No |
 
 ### Recruiter Quality Gate (Phase 5D)
 
@@ -336,17 +388,9 @@ status:
 - **Published posts**: Read-only — fully protected
 - **Saving**: Only updates content, never changes status
 - **Approval**: Requires explicit confirmation dialog
+- **Publishing**: Only from an approved post, via the Publish dialog
 - **Regeneration**: Creates a new post, preserves old until new succeeds
 - **Deletion**: Only draft/failed posts, requires confirmation
-
-### Status-Based Actions
-
-| Status | Edit | Save | Approve | Regenerate | Delete |
-|--------|------|------|---------|------------|--------|
-| Draft | Yes | Yes | Yes | Yes | Yes |
-| Failed | Yes | Yes | No | Yes | Yes |
-| Approved | No | No | No | No | No |
-| Published | No | No | No | No | No |
 
 ### Image Section
 
@@ -370,11 +414,12 @@ Image concerns are completely separate from text editing. Editing post text does
 
 ### Testing
 
-113 new tests covering:
-- Server Actions (getPost, updatePost, approvePost, deletePost, regeneratePost)
+113+ new tests covering:
+- Server Actions (getPost, updatePost, approvePost, deletePost, regeneratePost, publishPost)
 - Component rendering (status badges, cards, previews, metadata)
-- User interactions (filtering, search, save, approve, delete, regenerate)
-- Dialog behavior (open, close, confirm, cancel)
+- User interactions (filtering, search, save, approve, delete, regenerate, publish)
+- Dialog behavior (open, close, confirm, cancel; publish dialog re-gates + shows safe errors)
 - Accessibility (roles, aria attributes)
 - Loading/disabled states
 - Error handling
+- Publish idempotency and error mapping (see `publish-dialog.test.tsx`, `full-journey.e2e.test.ts`)

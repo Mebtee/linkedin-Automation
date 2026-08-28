@@ -9,7 +9,8 @@ import {
   updatePublishState,
 } from "@/services/generated-posts";
 import { generatePostForDay } from "@/services/ai/generation";
-import { getAccessToken, buildMemberUrn, publishToLinkedIn, loadPostImage } from "@/services/linkedin";
+import { getAccessToken, getConnectionStatus, buildMemberUrn, publishToLinkedIn, loadPostImage } from "@/services/linkedin";
+import { updateContentOpportunityStatus } from "@/services/recruiter/persistence";
 import { createWriteClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
@@ -117,6 +118,18 @@ export async function approvePost(postId: string): Promise<PostActionResult> {
     }
 
     const approved = await changeGeneratedPostStatus(postId, "approved" as GeneratedPostStatus);
+
+    // Phase 5E: keep the workspace card in sync. An approved draft moves its
+    // opportunity from "generated" → "approved" so the card offers "Publish
+    // to LinkedIn". Best-effort: the post is already approved.
+    if (post.opportunity_id) {
+      try {
+        await updateContentOpportunityStatus(post.opportunity_id, "approved");
+      } catch {
+        // Opportunity sync must never fail the approval.
+      }
+    }
+
     return { success: true, post: approved };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to approve post.";
@@ -183,6 +196,62 @@ export async function regenerateOpportunityPost(
 }
 
 /**
+ * Maps raw LinkedIn provider failures to display-safe messages (Phase 5E).
+ * Clients never see provider responses or tokens — only one of these codes.
+ */
+function mapLinkedInFailure(raw: string | undefined): {
+  code: string;
+  message: string;
+} {
+  if (raw === "INSUFFICIENT_SCOPE") {
+    return {
+      code: "INSUFFICIENT_SCOPE",
+      message:
+        "LinkedIn connection needs additional permissions to publish. Please reconnect with publishing permissions.",
+    };
+  }
+  if (/login|(401)|invalid token|unauthorized/i.test(raw ?? "")) {
+    return {
+      code: "LINKEDIN_TOKEN_INVALID",
+      message:
+        "Your LinkedIn connection is no longer valid. Please reconnect.",
+    };
+  }
+  if (/\(403\)|forbidden|scope/i.test(raw ?? "")) {
+    return {
+      code: "INSUFFICIENT_SCOPE",
+      message:
+        "LinkedIn has not granted permission to publish. Reconnect your account with publishing permissions.",
+    };
+  }
+  if (/\(429\)|rate\s*lim/i.test(raw ?? "")) {
+    return {
+      code: "LINKEDIN_RATE_LIMITED",
+      message:
+        "LinkedIn is rate-limiting requests right now. Please try again in a few minutes.",
+    };
+  }
+  if (/(\(5\d{2}\)|5\d{2})/.test(raw ?? "")) {
+    return {
+      code: "LINKEDIN_UNAVAILABLE",
+      message:
+        "LinkedIn is temporarily unavailable. Please try again shortly.",
+    };
+  }
+  if (/network error|failed to fetch|fetch failed/i.test(raw ?? "")) {
+    return {
+      code: "LINKEDIN_UNREACHABLE",
+      message:
+        "Unable to reach LinkedIn. Check your connection and try again.",
+    };
+  }
+  return {
+    code: "PUBLISH_FAILED",
+    message: "LinkedIn publishing failed. Please try again.",
+  };
+}
+
+/**
  * Publishes an approved post to LinkedIn.
  *
  * Flow:
@@ -207,6 +276,11 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
       };
     }
 
+    // 1b. Idempotency: an already-published post returns its existing result.
+    if (post.status === "published") {
+      return { success: true, post };
+    }
+
     // 2. Only approved posts may be published
     if (post.status !== "approved") {
       return {
@@ -216,6 +290,20 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
           message: "Only approved posts can be published.",
         },
       };
+    }
+
+    // 2b. Phase 5D gate is re-checked at publish time, never bypassed. A
+    // freshly edited (or regenerated) draft is always re-evaluated on the
+    // server before the LinkedIn call.
+    if (post.opportunity_id) {
+      const evaluated = await evaluateRecruiterPostForSavedPost(postId);
+      const gate = evaluateApproveGate(evaluated?.report);
+      if (!gate.allowed) {
+        return {
+          success: false,
+          error: { code: gate.code, message: gate.message },
+        };
+      }
     }
 
     // Verify the authenticated user session
@@ -236,9 +324,21 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
     // hardening migration revokes table-level SELECT of linkedin_connections
     // from authenticated), so use the admin client — matching the scheduler
     // publish path. Ownership is enforced by the post lookup in step 1.
-    const tokenData = await getAccessToken(createAdminClient(), user.id);
+    const adminClient = createAdminClient();
+    const tokenData = await getAccessToken(adminClient, user.id);
 
     if (!tokenData) {
+      // Phase 5E: distinguish an expired token from a missing connection.
+      const connectionInfo = await getConnectionStatus(adminClient, user.id);
+      if (connectionInfo.status === "expired") {
+        return {
+          success: false,
+          error: {
+            code: "LINKEDIN_TOKEN_EXPIRED",
+            message: "Your LinkedIn connection has expired. Please reconnect.",
+          },
+        };
+      }
       return {
         success: false,
         error: {
@@ -260,7 +360,6 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
     }
 
     // 5. Build the member URN and publish (attach the generated image when one exists)
-    const adminClient = createAdminClient();
     const memberUrn = buildMemberUrn(tokenData.linkedinSub);
     const image = await loadPostImage(adminClient, post.id, user.id);
     const result = image
@@ -275,25 +374,33 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
         published_at: new Date().toISOString(),
         publish_error: null,
       });
+
+      // Phase 5E: sync the workspace card (approved → published). Best-effort.
+      if (post.opportunity_id) {
+        try {
+          await updateContentOpportunityStatus(post.opportunity_id, "published");
+        } catch {
+          // The post is already live; the card shows the post's own status.
+        }
+      }
+
       return { success: true, post: updatedPost };
     }
 
-    // Publishing failed — store error, keep as approved
-    const errorMessage = result.error ?? "Unknown publishing error";
+    // Publishing failed — store a display-safe mapped message, keep as approved.
+    const mapped = mapLinkedInFailure(result.error);
     await updatePublishState(postId, {
-      publish_error: errorMessage,
+      publish_error: mapped.message,
     });
 
     return {
       success: false,
-      error: {
-        code: "PUBLISH_FAILED",
-        message: `Publishing failed: ${errorMessage}`,
-      },
+      error: mapped,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to publish post.";
     const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "PUBLISH_FAILED";
-    return { success: false, error: { code, message } };
+    const mapped = mapLinkedInFailure(`${code} ${message}`);
+    return { success: false, error: { code: mapped.code, message: mapped.message } };
   }
 }

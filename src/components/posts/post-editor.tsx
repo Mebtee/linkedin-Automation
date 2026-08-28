@@ -38,6 +38,8 @@ type PostEditorProps = {
   post: GeneratedPostRow;
   quality?: RecruiterQualityReport | null;
   opportunity?: ContentOpportunityRow | null;
+  topic?: string | null;
+  moduleTitle?: string | null;
 };
 
 type Toast = {
@@ -45,7 +47,7 @@ type Toast = {
   message: string;
 };
 
-export function PostEditor({ post, quality: initialQuality, opportunity }: PostEditorProps) {
+export function PostEditor({ post, quality: initialQuality, opportunity, topic, moduleTitle }: PostEditorProps) {
   const router = useRouter();
 
   // Form state
@@ -664,12 +666,17 @@ export function PostEditor({ post, quality: initialQuality, opportunity }: PostE
             takeaway={takeaway}
             nextStep={nextStep}
             hashtags={hashtags}
+            status={currentPost.status}
           />
           <ImageSection post={currentPost} />
           <PostMetadata post={currentPost} />
           {currentPost.opportunity_id && (
             <>
-              <OpportunitySummaryPanel opportunity={opportunity ?? null} />
+              <OpportunitySummaryPanel
+              opportunity={opportunity ?? null}
+              topic={topic}
+              moduleTitle={moduleTitle}
+            />
               <RecruiterQualityPanel report={quality} />
             </>
           )}
@@ -724,6 +731,8 @@ export function PostEditor({ post, quality: initialQuality, opportunity }: PostE
         onConfirm={handlePublish}
         onCancel={() => setPublishOpen(false)}
         isPublishing={isPublishing}
+        post={currentPost}
+        quality={quality}
       />
     </div>
   );

@@ -3,10 +3,39 @@ import { redirect, notFound } from "next/navigation";
 
 import type { RecruiterQualityReport } from "@/types/recruiter-quality";
 import { getUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { getGeneratedPost } from "@/services/generated-posts";
 import { getContentOpportunity } from "@/services/recruiter/persistence";
 import { evaluateRecruiterPostForSavedPost } from "@/services/recruiter/quality-service";
 import { PostEditor } from "@/components/posts/post-editor";
+
+type DayContext = { topic: string | null; moduleTitle: string | null };
+
+async function loadDayContext(dayNumber: number | null): Promise<DayContext> {
+  if (dayNumber === null || dayNumber === undefined) {
+    return { topic: null, moduleTitle: null };
+  }
+  try {
+    const supabase = await createClient();
+    const { data: day } = await supabase
+      .from("curriculum_days")
+      .select("topic, module_id")
+      .eq("day_number", dayNumber)
+      .single();
+    if (!day) return { topic: null, moduleTitle: null };
+    const { data: module } = await supabase
+      .from("modules")
+      .select("title")
+      .eq("id", day.module_id as string)
+      .single();
+    return {
+      topic: (day.topic as string | null) ?? null,
+      moduleTitle: (module?.title as string | null) ?? null,
+    };
+  } catch {
+    return { topic: null, moduleTitle: null };
+  }
+}
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -39,9 +68,18 @@ export default async function PostEditorPage({ params }: PageProps) {
     opportunity = await getContentOpportunity(post.opportunity_id);
   }
 
+  // Phase 5E: curriculum context (topic / module) for the summary panel.
+  const context: DayContext = await loadDayContext(post.day_number);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <PostEditor post={post} quality={quality} opportunity={opportunity} />
+      <PostEditor
+        post={post}
+        quality={quality}
+        opportunity={opportunity}
+        topic={context.topic}
+        moduleTitle={context.moduleTitle}
+      />
     </div>
   );
 }

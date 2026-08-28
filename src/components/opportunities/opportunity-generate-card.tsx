@@ -18,6 +18,10 @@ import {
 
 type OpportunityGenerateCardProps = {
   opportunity: ContentOpportunityRow;
+  /** Curriculum-day topic for the source day (server-supplied). */
+  topic?: string | null;
+  /** Parent module title for the source day (server-supplied). */
+  moduleTitle?: string | null;
 };
 
 type PostSummary = {
@@ -61,7 +65,11 @@ const EVIDENCE_RANK: Record<string, number> = {
   USER_CONFIRMED: 3,
 };
 
-export function OpportunityGenerateCard({ opportunity }: OpportunityGenerateCardProps) {
+export function OpportunityGenerateCard({
+  opportunity,
+  topic,
+  moduleTitle,
+}: OpportunityGenerateCardProps) {
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +166,18 @@ export function OpportunityGenerateCard({ opportunity }: OpportunityGenerateCard
             <dd className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
               {opportunity.day_number}
             </dd>
+          </div>
+        )}
+        {topic && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-zinc-500 dark:text-zinc-400">Topic</dt>
+            <dd className="font-medium text-zinc-900 dark:text-zinc-50">{topic}</dd>
+          </div>
+        )}
+        {moduleTitle && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-zinc-500 dark:text-zinc-400">Module</dt>
+            <dd className="font-medium text-zinc-900 dark:text-zinc-50">{moduleTitle}</dd>
           </div>
         )}
         <div className="flex justify-between gap-2">

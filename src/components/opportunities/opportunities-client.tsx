@@ -1,119 +1,207 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, type ReactNode } from "react";
 
-import { listContentOpportunitiesAction } from "@/app/actions/content-opportunities";
-import { POST_TYPE_META } from "@/config/recruiter";
 import type { ContentOpportunityRow } from "@/types/content-opportunity";
-import { OpportunityGenerateCard } from "@/components/opportunities/opportunity-generate-card";
+import type { GeneratedPostRow } from "@/types/generated-post";
+import type { PublishRecommendation } from "@/types/recruiter-quality";
+import { OpportunityGenerateCard } from "./opportunity-generate-card";
+import { OpportunityCard } from "./opportunity-card";
+import { RecruiterStrategyPanel } from "./recruiter-strategy-panel";
 
-type OpportunitiesClientProps = {
-  limit?: number;
+type RecommendedOpportunity = {
+  opportunity: ContentOpportunityRow;
+  reason: string | null;
+  diversityAdjusted: boolean;
+  topic: string | null;
+  moduleTitle: string | null;
 };
 
-const INTERESTING_STATUSES = ["selected", "generated", "approved", "published"] as const;
+type OpportunitiesClientProps = {
+  opportunities: ContentOpportunityRow[];
+  posts: GeneratedPostRow[];
+  recommended: RecommendedOpportunity | null;
+};
 
-export function OpportunitiesClient({ limit = 10 }: OpportunitiesClientProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [opportunities, setOpportunities] = useState<ContentOpportunityRow[]>([]);
+function Section({
+  title,
+  empty,
+  children,
+}: {
+  title: string;
+  empty: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={title}>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+        {title}
+      </h2>
+      {children || (
+        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{empty}</p>
+      )}
+    </section>
+  );
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await listContentOpportunitiesAction({ limit });
-    if (result.success) {
-      setOpportunities(result.opportunities);
-    } else {
-      setError(result.error);
+export function OpportunitiesClient({
+  opportunities,
+  posts,
+  recommended,
+}: OpportunitiesClientProps) {
+  // posts arrive newest-first; the first match per opportunity is its current draft.
+  const postByOpportunity = useMemo(() => {
+    const map = new Map<string, GeneratedPostRow>();
+    for (const post of posts) {
+      if (post.opportunity_id && !map.has(post.opportunity_id)) {
+        map.set(post.opportunity_id, post);
+      }
     }
-    setLoading(false);
-  }, [limit]);
+    return map;
+  }, [posts]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
+  const recommendationOf = (id: string): PublishRecommendation | null =>
+    postByOpportunity.get(id)?.recruiter_quality_report?.recommendation ?? null;
 
-  const active = opportunities.find((o) => o.status === "selected") ?? opportunities[0] ?? null;
+  const readyToGenerate = opportunities.filter(
+    (o) =>
+      (o.status === "candidate" || o.status === "selected") &&
+      recommended?.opportunity.id !== o.id,
+  );
 
-  if (loading) {
-    return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading opportunities…</p>;
-  }
+  const generated = opportunities.filter((o) => {
+    if (o.status !== "generated") return false;
+    const rec = recommendationOf(o.id);
+    return rec !== "needs_review" && rec !== "do_not_publish";
+  });
 
-  if (error) {
-    return (
-      <div
-        role="alert"
-        className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300"
-      >
-        {error}
-      </div>
-    );
-  }
+  const needsReview = opportunities.filter(
+    (o) => o.status === "generated" && recommendationOf(o.id) === "needs_review",
+  );
 
-  if (opportunities.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          No Opportunities Yet
-        </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-          Recruiter-focused post opportunities appear here after your journal entries are
-          submitted and course materials are processed. Track a strong piece of work and it
-          becomes eligible for a post.
-        </p>
-      </div>
-    );
-  }
+  const blocked = opportunities.filter(
+    (o) => o.status === "generated" && recommendationOf(o.id) === "do_not_publish",
+  );
 
-  const others = active
-    ? opportunities.filter((o) => o.id !== active.id)
-    : [];
+  const approved = opportunities.filter((o) => o.status === "approved");
+  const published = opportunities.filter((o) => o.status === "published");
+
+  const hasSection = (rows: ContentOpportunityRow[]) => rows.length > 0;
+  const anyWorkStarted =
+    readyToGenerate.length > 0 ||
+    generated.length > 0 ||
+    needsReview.length > 0 ||
+    blocked.length > 0 ||
+    approved.length > 0 ||
+    published.length > 0;
 
   return (
-    <div className="space-y-6">
-      {active && <OpportunityGenerateCard opportunity={active} />}
-
-      {others.length > 0 && (
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Other Opportunities
-          </h2>
-          <div className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-            {others.map((o) => {
-              const status = o.status;
-              const isActiveStatus = INTERESTING_STATUSES.includes(
-                status as (typeof INTERESTING_STATUSES)[number],
-              );
-              return (
-                <div
-                  key={o.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                      {o.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                      {POST_TYPE_META[o.post_type].label} · Score {o.recruiter_score}
-                      {o.day_number ? ` · Day ${o.day_number}` : ""}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-medium ${
-                      isActiveStatus
-                        ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                    }`}
-                  >
-                    {o.status}
-                  </span>
-                </div>
-              );
-            })}
+    <div className="space-y-8">
+      {recommended ? (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#06B6D4]">
+              Recommended for You
+            </p>
+            <OpportunityGenerateCard
+              opportunity={recommended.opportunity}
+              topic={recommended.topic}
+              moduleTitle={recommended.moduleTitle}
+            />
           </div>
-        </section>
+          <RecruiterStrategyPanel />
+        </div>
+      ) : (
+        <RecruiterStrategyPanel />
       )}
+
+      {!anyWorkStarted && !recommended && (
+        <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+          No opportunities yet. Import a journal or PDF in Settings &amp;
+          Prompts, then run &quot;Build Today&apos;s Options&quot; to score daily content ideas.
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section
+          title="Ready to Generate"
+          empty="Nothing to build right now."
+        >
+          {readyToGenerate.map((o) => (
+            <OpportunityCard
+              key={o.id}
+              opportunity={o}
+              post={postByOpportunity.get(o.id) ?? null}
+            />
+          ))}
+        </Section>
+
+        {hasSection(generated) && (
+          <Section title="Generated" empty="No generated drafts.">
+            {generated.map((o) => (
+              <OpportunityCard
+                key={o.id}
+                opportunity={o}
+                post={postByOpportunity.get(o.id) ?? null}
+              />
+            ))}
+          </Section>
+        )}
+
+        {hasSection(needsReview) && (
+          <Section
+            title="Needs Review"
+            empty="No drafts flagged for review."
+          >
+            {needsReview.map((o) => (
+              <OpportunityCard
+                key={o.id}
+                opportunity={o}
+                post={postByOpportunity.get(o.id) ?? null}
+              />
+            ))}
+          </Section>
+        )}
+
+        {hasSection(blocked) && (
+          <Section title="Blocked" empty="No blocked drafts.">
+            {blocked.map((o) => (
+              <OpportunityCard
+                key={o.id}
+                opportunity={o}
+                post={postByOpportunity.get(o.id) ?? null}
+              />
+            ))}
+          </Section>
+        )}
+
+        {hasSection(approved) && (
+          <Section title="Approved" empty="No approved drafts.">
+            {approved.map((o) => (
+              <OpportunityCard
+                key={o.id}
+                opportunity={o}
+                post={postByOpportunity.get(o.id) ?? null}
+              />
+            ))}
+          </Section>
+        )}
+
+        {hasSection(published) && (
+          <Section
+            title="Published"
+            empty="Nothing published yet."
+          >
+            {published.map((o) => (
+              <OpportunityCard
+                key={o.id}
+                opportunity={o}
+                post={postByOpportunity.get(o.id) ?? null}
+              />
+            ))}
+          </Section>
+        )}
+      </div>
     </div>
   );
 }

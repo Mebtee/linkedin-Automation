@@ -82,7 +82,11 @@ for testing.
    `/api/media/<postId>/image`; another account must get 404 for that URL.
 6. **LinkedIn**: connect account in Settings (OAuth round-trip), approve a
    post, use Publish, confirm the post appears on LinkedIn and
-   `linkedin_post_id` is stored with status `published`.
+   `linkedin_post_id` is stored with status `published`. Publish the same
+   post again — it is **idempotent** (no second LinkedIn post; the stored
+   result is returned). An unapproved draft must be rejected with
+   `INVALID_STATUS`, and publishing without `w_member_social` must surface the
+   display-safe `INSUFFICIENT_SCOPE` reconnect message.
 7. **Scheduling**: schedule an approved post ~10 minutes out; wait for the
    cron run; status transitions `scheduled → publishing → published`;
    `attempt_count` is exactly 1.
@@ -130,7 +134,8 @@ change). It collates safety-relevant items spread across the other sections.
 
 - **Expired LinkedIn connection** (`status: expired` in Settings): use
   Reauthorize (publish scopes) — no data loss; failed schedules can be
-  rescheduled after reconnecting.
+  rescheduled after reconnecting. A publish-time expired token maps to
+  `LINKEDIN_TOKEN_EXPIRED` and the UI prompts to reconnect.
 - **Gemini outage**: none required — generation silently falls back to the
   template provider and still succeeds.
 - **Failed schedule**: shown on `/schedule` with the stored error; fix the

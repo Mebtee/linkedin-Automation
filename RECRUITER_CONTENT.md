@@ -1,4 +1,4 @@
-# Recruiter Content System — Phases 5A, 5B, 5C & 5D
+# Recruiter Content System — Phases 5A, 5B, 5C, 5D & 5E
 
 Deterministic, evidence-grounded LinkedIn content for recruiters.
 
@@ -20,6 +20,12 @@ Deterministic, evidence-grounded LinkedIn content for recruiters.
   review-panel UI, and an approve-time gate that always re-evaluates
   server-side. `needs_review` asks for explicit confirmation; <55 or a critical
   safety finding blocks approval outright.
+- **5E — Dashboard, approval UX & manual LinkedIn publishing (complete, this doc)**:
+  a polished `/opportunities` dashboard ("Recommended for You", state-driven
+  per-step cards, progress stepper, strategy panel), a Publish dialog on approved
+  posts, idempotent `publishPost` with display-safe error mapping, and automatic
+  opportunity status sync (`approve → approved`, `publish → published`).
+  Publishing is **never automatic** — only the user's explicit action publishes.
 
 ## Anti-hallucination contract (never weakened)
 
@@ -48,7 +54,10 @@ course_materials.journal_proposal (unconfirmed)─┘        │  (Phase 5A scor
                                               generated_posts.opportunity_id ◄┘  (shared pipeline; status=generated)
                                                           │
                                                           ▼
-                                                /posts/[id] editor (draft) ──► approve ──► publish
+                                                /posts/[id] editor (draft) ──► approve ──► Publish dialog ──► publishPost (idempotent)
+                                                          │                     │                              │
+                                                    (quality gate 5D)          ▼                              ▼
+                                                        approve ──────► approved                      published + opportunity sync
 ```
 
 Generation is handled by the ONE shared core (`generatePostFromPreparedInput`
@@ -85,7 +94,15 @@ is the deterministic fallback and is also used for unit tests.
   (plain result objects, no tokens / chain-of-thought), incl.
   `generatePostFromOpportunityAction` and `getPostQualityForOpportunityAction`.
 - `src/app/actions/generated-posts.ts` — post actions incl. the Phase 5D
-  approve gate (`approvePost`) and `regenerateOpportunityPost`.
+  approve gate (`approvePost`), `regenerateOpportunityPost`, and the Phase 5E
+  idempotent `publishPost`.
+- `src/components/opportunities/` — Phase 5E dashboard: `opportunities-client.tsx`
+  (Recommended for You + grouped by status), `opportunity-card.tsx` (per-state
+  step card + "Publish" link), `opportunity-generate-card.tsx` (featured selection
+  with topic/module badges), `opportunity-progress.tsx` (stepper),
+  `recruiter-strategy-panel.tsx`.
+- `src/components/posts/publish-dialog.tsx`, `post-preview.tsx` — Publish dialog
+  and "Draft — Not Published" badge on approved posts.
 
 ## Key behaviors
 
@@ -263,3 +280,61 @@ Gates: `pnpm test` / `pnpm typecheck` / `pnpm lint` / `pnpm build`.
 - No hidden reasoning surfaced — the report only carries the safe public shape.
 - No new RLS policies (owner-scoped RLS already covers `generated_posts`).
 - No auto-publish — approval still requires the existing approve + publish flow.
+
+## Phase 5E — Dashboard, approval UX & manual publishing
+
+### Dashboard (`/opportunities`)
+
+- `selectBestContentOpportunity` (server-side, write-on-GET described in
+  `src/app/opportunities/page.tsx`) ranks eligible candidates by stored Phase 5A
+  score and advances only the winner to `selected` with a concise
+  `selection_reason`.
+- The page groups opportunities by state and renders per-state cards — candidate /
+  selected (featured "Generate post" card), generated / approved (linked post
+  quality badge + Open Draft), published (LinkedIn preview link). A progress
+  stepper shows Candidate → Selected → Generated → Published and a strategy panel
+  explains the day's recommended focus.
+- The `published` opportunity card shows the linked post's LinkedIn preview and a
+  "View on LinkedIn" link (when `linkedin_post_id` is set, shown on the editor).
+  Opening a published card is fully read-only.
+
+### Publish readiness
+
+The publish-ineligible path is surfaced, never hidden:
+
+- Opportunity cards for `candidate` / `selected` / `generated` / `approved`
+  show *why* publishing is not yet reachable (the state chip + per-step card).
+- Approved posts on `/posts` expose a "Publish" affordance that opens
+  `PublishDialog`; the dialog explains what will be shared and calls
+  `publishPost`. There is **no** automatic publication anywhere.
+
+### Idempotent manual publishing
+
+`publishPost` (in `src/app/actions/generated-posts.ts`) validates on the server:
+ownership, `approved` status, active non-expired token, `w_member_social` scope,
+and **never** double-publishes (already-published posts simply return the stored
+result with no API call). The publish-time quality gate is re-checked for
+opportunity-backed posts. See [POSTS.md](POSTS.md) for the full ordered list and
+display-safe error mapping (`LINKEDIN_TOKEN_INVALID`, `LINKEDIN_TOKEN_EXPIRED`,
+`INSUFFICIENT_SCOPE`, `LINKEDIN_RATE_LIMITED`, `LINKEDIN_UNAVAILABLE`,
+`LINKEDIN_UNREACHABLE`, `PUBLISH_FAILED`). Only the mapped message is written to
+`publish_error`; raw provider responses are never surfaced.
+
+### Opportunity ↔ post sync
+
+`content_opportunities` status advances in lock-step with the post only on
+owner-scoped server actions: `approvePost` → `approved`, `publishPost` →
+`published`. The post's `status` is the single source of truth; the opportunity
+row's status is best-effort, validated against the enforced transition table in
+`src/types/content-opportunity.ts`. Deleting an opportunity severs the link
+(`ON DELETE SET NULL`) but never un-publishes a post.
+
+## What Phase 5E explicitly did NOT do
+
+- No automatic scheduling or publishing — `publishPost` is only called by the
+  user's explicit Publish action.
+- No cron/interval changes and no new background jobs.
+- No weakened quality/anti-hallucination/RLS/OAuth gates — publish re-checks them.
+- No new DB migration: publish state ships on the existing additive columns
+  (`linkedin_post_id`, `published_at`, `publish_error` on `generated_posts`).
+- No tokens or raw provider errors written to the client or `publish_error`.

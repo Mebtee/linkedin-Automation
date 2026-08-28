@@ -65,6 +65,7 @@ const PROFILE_SCOPED_TABLES = new Set([
   "linkedin_connections",
   "course_materials",
   "course_material_pages",
+  "content_opportunities",
 ]);
 
 type Filter = { col: string; op: "eq" | "lte" | "in"; val: unknown; allowUidFromPath?: boolean };
@@ -233,11 +234,22 @@ class FakeQuery {
       return { data: null, count: null, error: null };
     }
     if (this.mode === "upsert") {
-      const conflictKey = this.upsertOpts.onConflict ?? "id";
+      const conflictKeys = (this.upsertOpts.onConflict ?? "id")
+        .split(",")
+        .map((key) => key.trim())
+        .filter(Boolean);
+      const conflicts = (a: Row, b: Row): boolean =>
+        conflictKeys.every((key) => a[key] === b[key]);
       const incoming = Array.isArray(this.payload) ? this.payload : [this.payload!];
       for (const raw of incoming) {
+        if (scopeEnforced) {
+          const owner = raw.profile_id ?? owningProfileOf(this.db, this.table, raw);
+          if (owner !== undefined && owner !== this.db.userId) {
+            return { data: null, count: null, error: { message: "RLS violation", code: "42501" } };
+          }
+        }
         const idx = rows.findIndex(
-          (r) => r[conflictKey] === raw[conflictKey] && (!scopeEnforced || owningProfileOf(this.db, this.table, r) === this.db.userId),
+          (r) => conflicts(r, raw) && (!scopeEnforced || owningProfileOf(this.db, this.table, r) === this.db.userId),
         );
         if (idx >= 0) {
           rows[idx] = { ...rows[idx], ...raw, updated_at: new Date().toISOString() };
@@ -250,6 +262,7 @@ class FakeQuery {
           });
         }
       }
+      if (this.wantRowsAfterMutation) return { data: rows, count: rows.length, error: null };
       return { data: null, count: null, error: null };
     }
     if (this.mode === "update") {
@@ -360,6 +373,7 @@ function seedDatabase(db: FakeDb): void {
   db.tables.generated_posts = [];
   db.tables.scheduled_posts = [];
   db.tables.media_assets = [];
+  db.tables.content_opportunities = [];
 }
 
 let userDb: FakeDb;
@@ -370,7 +384,13 @@ import { createClient, createWriteClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ingestCourseMaterial } from "@/services/course-materials";
 import { saveJournal, submitJournal } from "@/app/actions/journal";
-import { regeneratePost, approvePost, publishPost } from "@/app/actions/generated-posts";
+import { regeneratePost, approvePost, publishPost, updatePost } from "@/app/actions/generated-posts";
+import {
+  generateContentOpportunitiesForDayAction,
+  selectBestContentOpportunityAction,
+  generatePostFromOpportunityAction,
+  getPostQualityForOpportunityAction,
+} from "@/app/actions/content-opportunities";
 import { generatePostImage } from "@/services/image/service";
 import { schedulePost } from "@/services/scheduling";
 import { POST as schedulerPOST } from "@/app/api/scheduler/publish/route";
@@ -484,6 +504,36 @@ async function ingestToApprovedPost(pdfText: string[], fileName = "journey.pdf")
     post: approved.success ? approved.post : post,
     saved,
     asset,
+  };
+}
+
+/**
+ * Rich, USER_CONFIRMED journal for the recruiter journey. Mirrors a real user
+ * finishing their day sheet: the PDF fills whatILearned; the user (test) then
+ * completes the first-person practice/problem fields before submitting so the
+ * journal carries confirmed implementation + debugging evidence.
+ */
+function recruiterSaveInput(
+  proposal: { journal: Record<string, unknown> },
+  dayNumber: number,
+) {
+  return {
+    ...proposalToSaveInput(proposal, dayNumber),
+    whatIBuilt:
+      "built a full-stack notes REST API with Next.js API routes, Supabase Postgres, and OAuth sign-in",
+    projectName: "notes-api",
+    projectDescription:
+      "a notes API using Next.js, Supabase with row level security, and an OAuth flow",
+    challenge:
+      "the API returned a permission denied error because the row level security policy blocked the query",
+    howISolvedIt:
+      "debugged the failing query and fixed the RLS policy by matching the owner_id before re-deploying",
+    codeReference: "the notes-api RLS policy and Supabase queries",
+    keyTakeaway:
+      typeof proposal.journal.keyTakeaway === "string" && proposal.journal.keyTakeaway.trim()
+        ? proposal.journal.keyTakeaway
+        : "row level security must allow the querying user, not just the table",
+    additionalNotes: "practiced debugging a permission denied failure end to end",
   };
 }
 
@@ -668,6 +718,132 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
     if (!pubResult.success) {
       expect(pubResult.error.code).toBe("INSUFFICIENT_SCOPE");
     }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("runs the Phase 5E recruiter journey: opportunity → generate → review → edit → approve → publish → published", async () => {
+    // 1. Ingest the course PDF and submit a confirmed personal journal.
+    const pdfBytes = buildTestPdf([
+      "Day 1 HTML Basics — this chapter covers semantic tags and accessibility.",
+    ]);
+    const ingest = await ingestCourseMaterial("recruiter.pdf", pdfBytes);
+    const dayNumber = ingest.proposal.curriculumDay;
+    const saved = await saveJournal(recruiterSaveInput(ingest.proposal, dayNumber));
+    expect(saved.success).toBe(true);
+    const submitted = await submitJournal({ entryId: saved.entryId! });
+    expect(submitted.success).toBe(true);
+
+    // 2. Build scored content opportunities from the confirmed journal.
+    const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
+    expect(oppGen.success).toBe(true);
+    if (!oppGen.success) throw new Error(oppGen.error);
+    expect(oppGen.count).toBeGreaterThan(0);
+
+    // 3. Mark the deterministic winner "selected" (Phase 5A score, not a 2nd engine).
+    const best = await selectBestContentOpportunityAction();
+    expect(best.success).toBe(true);
+    if (!best.success) throw new Error(best.error);
+    const opportunity = best.opportunity!;
+    expect(opportunity).toBeTruthy();
+    expect(opportunity.selection_reason).toBeTruthy();
+
+    // 4. Generate the draft from the opportunity (still just a draft).
+    const draft = await generatePostFromOpportunityAction(opportunity.id);
+    expect(draft.success).toBe(true);
+    if (!draft.success) throw new Error(draft.error);
+    expect(draft.created).toBe(true);
+    expect(draft.duplicate).toBe(false);
+    expect(draft.post.status).toBe("draft");
+    expect(draft.post.opportunity_id).toBe(opportunity.id);
+    expect(draft.post.recruiter_quality_score).toBeTypeOf("number");
+
+    // 5. The reviewer sees the stored quality summary on the opportunity card.
+    const summary = await getPostQualityForOpportunityAction(opportunity.id);
+    expect(summary.success).toBe(true);
+    if (!summary.success) throw new Error(summary.error);
+    expect(summary.post?.id).toBe(draft.post.id);
+    expect(summary.post?.score).toBeTypeOf("number");
+    expect(["strong", "ready", "needs_review", "do_not_publish"]).toContain(
+      summary.post?.recommendation,
+    );
+
+    // 6. Editing the draft re-evaluates quality server-side (Phase 5D/E).
+    const edited = await updatePost(draft.post.id, { opening: "Edited recruiter opening." });
+    expect(edited.success).toBe(true);
+    if (!edited.success) throw new Error(edited.error.message);
+    expect(edited.post.opening).toBe("Edited recruiter opening.");
+    expect(edited.quality).not.toBeUndefined();
+
+    // 7. Approve — re-checked at approval time, then the opportunity advances.
+    const approved = await approvePost(draft.post.id);
+    expect(approved.success).toBe(true);
+    if (!approved.success) throw new Error(approved.error.message);
+    expect(approved.post.status).toBe("approved");
+    const approvedRow = userDb.tables.content_opportunities!.find(
+      (o) => o.id === opportunity.id,
+    )!;
+    expect(approvedRow.status).toBe("approved");
+
+    // 8. Manual publish (approved → published). Author URN from stored subject.
+    const pub = await publishPost(draft.post.id);
+    expect(pub.success).toBe(true);
+    if (!pub.success) throw new Error(pub.error.message);
+    expect(pub.post.status).toBe("published");
+    expect(pub.post.linkedin_post_id).toBe("urn:li:share:JOURNEY1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const ugcCall = fetchMock.mock.calls.find(
+      ([u]) => String(u) === "https://api.linkedin.com/v2/ugcPosts",
+    ) as [string, RequestInit];
+    expect(ugcCall).toBeDefined();
+    const payloadBody = JSON.parse(ugcCall[1].body as string) as {
+      author: string;
+    };
+    expect(payloadBody.author).toBe(`urn:li:person:${LINKEDIN_SUB}`);
+    const publishedRow = userDb.tables.content_opportunities!.find(
+      (o) => o.id === opportunity.id,
+    )!;
+    expect(publishedRow.status).toBe("published");
+
+    // 9. Idempotent: publishing again returns the existing result, no new call.
+    const pubAgain = await publishPost(draft.post.id);
+    expect(pubAgain.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never publishes an unapproved recruiter draft and never generates a second draft for the same opportunity", async () => {
+    const pdfBytes = buildTestPdf([
+      "Day 1 HTML Basics — this chapter covers semantic tags and accessibility.",
+    ]);
+    const ingest = await ingestCourseMaterial("recruiter-blocked.pdf", pdfBytes);
+    const dayNumber = ingest.proposal.curriculumDay;
+    const saved = await saveJournal(recruiterSaveInput(ingest.proposal, dayNumber));
+    await submitJournal({ entryId: saved.entryId! });
+
+    const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
+    if (!oppGen.success) throw new Error(oppGen.error);
+    const best = await selectBestContentOpportunityAction();
+    if (!best.success) throw new Error(best.error);
+    const opportunity = best.opportunity!;
+
+    const draft = await generatePostFromOpportunityAction(opportunity.id);
+    if (!draft.success) throw new Error(draft.error);
+    expect(draft.created).toBe(true);
+
+    // Attempting generation again returns the SAME draft (duplicate, no new post).
+    const again = await generatePostFromOpportunityAction(opportunity.id);
+    expect(again.success).toBe(true);
+    if (!again.success) throw new Error(again.error);
+    expect(again.created).toBe(false);
+    expect(again.duplicate).toBe(true);
+    expect(again.post.id).toBe(draft.post.id);
+    expect(
+      userDb.tables.generated_posts!.filter((p) => p.opportunity_id === opportunity.id),
+    ).toHaveLength(1);
+
+    // The unapproved draft can never reach LinkedIn.
+    const pub = await publishPost(draft.post.id);
+    expect(pub.success).toBe(false);
+    if (!pub.success) expect(pub.error.code).toBe("INVALID_STATUS");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

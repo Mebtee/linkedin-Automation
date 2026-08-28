@@ -4,6 +4,10 @@ import Link from "next/link";
 import type { GeneratedPostRow } from "@/types/generated-post";
 import { PostStatusBadge } from "./post-status-badge";
 import { content } from "@/config/content";
+import {
+  recommendationLabel,
+  recommendationStyle,
+} from "./recruiter-quality-panel";
 
 type PostCardProps = {
   post: GeneratedPostRow;
@@ -17,6 +21,16 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getFormatLabel(format: string): string {
   const entry = Object.entries(content.formats).find(([key]) => key === format);
   return entry ? entry[1].name : format;
@@ -24,6 +38,7 @@ function getFormatLabel(format: string): string {
 
 export function PostCard({ post }: PostCardProps) {
   const preview = post.body.length > 120 ? post.body.slice(0, 120) + "..." : post.body;
+  const quality = post.recruiter_quality_report;
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
@@ -38,6 +53,25 @@ export function PostCard({ post }: PostCardProps) {
             <span aria-hidden="true">·</span>
             <span>{formatDate(post.created_at)}</span>
           </div>
+
+          {(post.recruiter_quality_score !== null ||
+            quality?.recommendation) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {post.recruiter_quality_score !== null && quality?.recommendation && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${recommendationStyle(quality.recommendation)}`}
+                >
+                  Post quality {post.recruiter_quality_score}/100 ·{" "}
+                  {recommendationLabel(quality.recommendation)}
+                </span>
+              )}
+              {quality?.recommendation === "do_not_publish" && (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                  Not approved for publishing
+                </span>
+              )}
+            </div>
+          )}
 
           <h3 className="mt-2 line-clamp-2 text-sm font-medium text-[#111827] dark:text-zinc-50">
             {post.opening}
@@ -63,6 +97,13 @@ export function PostCard({ post }: PostCardProps) {
               )}
             </div>
           )}
+
+          {post.status === "published" && post.linkedin_post_id && (
+            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+              <span className="font-semibold">Published to LinkedIn</span>
+              {post.published_at && <> · {formatDateTime(post.published_at)}</>}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-2">
@@ -71,7 +112,7 @@ export function PostCard({ post }: PostCardProps) {
             href={`/posts/${post.id}`}
             className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
-            {post.status === "draft" || post.status === "failed" ? "Edit" : "Review"}
+            {post.status === "published" ? "View" : post.status === "draft" || post.status === "failed" ? "Edit" : "Review"}
           </Link>
         </div>
       </div>

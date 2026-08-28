@@ -152,6 +152,9 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 | `opportunity_id` | `uuid` | nullable, FK → `content_opportunities(id)` ON DELETE SET NULL | Source content opportunity (Phase 5C) |
 | `recruiter_quality_score` | `integer` | nullable, check 0..100 | Deterministic post-quality score (Phase 5D) |
 | `recruiter_quality_report` | `jsonb` | nullable | Safe post-quality report (Phase 5D) |
+| `linkedin_post_id` | `text` | nullable | LinkedIn-assigned identifier (`urn:li:share:…`) after a successful publish (Phase 5E) |
+| `published_at` | `timestamptz` | nullable | Timestamp of the successful manual/scheduled publish (Phase 5E) |
+| `publish_error` | `text` | nullable | Display-safe error message from the last failed publish; cleared on success (Phase 5E) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
 
@@ -167,6 +170,11 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 - `recruiter_quality_score` / `recruiter_quality_report` (Phase 5D) are nullable and
   written only by the server-side `annotateGeneratedPostQuality`; the approve gate
   re-evaluates server-side before approving.
+- `linkedin_post_id` / `published_at` / `publish_error` (Phase 5E) are written only by
+  the server-side `publishPost` / scheduled publisher. `publish_error` stores a
+  display-safe mapped message (never a raw provider response) and is cleared on a
+  successful publish. Publishing is **manual and idempotent** — an already-published
+  post is never re-posted.
 
 **Indexes:**
 - `idx_gp_profile_id` on `(profile_id)` — all posts for a user
@@ -176,11 +184,15 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 - `idx_gp_journal_entry_id` on `(journal_entry_id)` — posts from a journal entry
 - `idx_gp_content_hash` on `(content_hash)` — duplicate detection
 - `idx_gp_opportunity_id` on `(opportunity_id)` — look up posts by opportunity
+- `idx_gp_linkedin_post_id` on `(linkedin_post_id)` (partial, non-null) — published-post lookups
 
 **Status lifecycle:**
 - `draft` → `approved` → `published`
 - `draft` → `failed`
 - `published` and `failed` are terminal states
+- For opportunity-backed posts, approving/publishing also advances the linked
+  `content_opportunities` row (`approved` / `published`) — enforced server-side in
+  `approvePost` / `publishPost` (Phase 5E).
 
 ---
 

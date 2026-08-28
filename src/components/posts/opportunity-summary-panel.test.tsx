@@ -47,4 +47,21 @@ describe("OpportunitySummaryPanel", () => {
     expect(screen.getByText("generated")).toBeDefined();
     expect(screen.getByText(/Strong implementation evidence/)).toBeDefined();
   });
+
+  it("shows the evidence status of the strongest stored reference", () => {
+    render(<OpportunitySummaryPanel opportunity={opportunity} />);
+    expect(screen.getByText("USER_CONFIRMED")).toBeDefined();
+  });
+
+  it("shows the curriculum topic and module when provided", () => {
+    render(
+      <OpportunitySummaryPanel
+        opportunity={opportunity}
+        topic="Databases"
+        moduleTitle="Storage"
+      />,
+    );
+    expect(screen.getByText("Databases")).toBeDefined();
+    expect(screen.getByText("Storage")).toBeDefined();
+  });
 });

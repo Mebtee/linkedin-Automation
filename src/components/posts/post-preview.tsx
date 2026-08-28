@@ -4,6 +4,8 @@ type PostPreviewProps = {
   takeaway: string;
   nextStep: string;
   hashtags: string[];
+  /** When provided and not "published", Preview shows the "Draft — Not Published" badge. */
+  status?: string;
 };
 
 export function PostPreview({
@@ -12,12 +14,20 @@ export function PostPreview({
   takeaway,
   nextStep,
   hashtags,
+  status,
 }: PostPreviewProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-        Preview
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          Preview
+        </h3>
+        {status && status !== "published" && (
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            Draft — Not Published
+          </span>
+        )}
+      </div>
       <div className="mt-3 space-y-3 text-sm text-[#111827] dark:text-zinc-100">
         {opening && (
           <p className="font-medium">{opening}</p>

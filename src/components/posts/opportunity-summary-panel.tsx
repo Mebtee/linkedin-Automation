@@ -6,12 +6,17 @@ import { CONTENT_GOAL_LABELS, POST_TYPE_META } from "@/config/recruiter";
  *
  * The opportunity row (including `recruiter_score`) is the one recorded during
  * Phase 5B selection — it is displayed as-stored and is never recomputed or
- * rewritten on this screen.
+ * rewritten on this screen. `topic`/`moduleTitle` are curriculum context loaded
+ * server-side and are purely informational.
  */
 export function OpportunitySummaryPanel({
   opportunity,
+  topic,
+  moduleTitle,
 }: {
   readonly opportunity: ContentOpportunityRow | null;
+  readonly topic?: string | null;
+  readonly moduleTitle?: string | null;
 }) {
   if (!opportunity) {
     return (
@@ -27,6 +32,22 @@ export function OpportunitySummaryPanel({
   }
 
   const meta = POST_TYPE_META[opportunity.post_type];
+
+  const evidenceStatus = (() => {
+    const rank: Record<string, number> = {
+      MISSING: 0,
+      INFERRED_FROM_STRUCTURE: 1,
+      SUPPORTED_BY_PDF: 2,
+      USER_CONFIRMED: 3,
+    };
+    return opportunity.evidence.reduce(
+      (best, ref) =>
+        (rank[ref.confidence] ?? 0) > (rank[best] ?? 0)
+          ? ref.confidence
+          : best,
+      "MISSING",
+    );
+  })();
 
   return (
     <section
@@ -62,6 +83,24 @@ export function OpportunitySummaryPanel({
             </dd>
           </div>
         )}
+        {topic && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-zinc-500 dark:text-zinc-400">Topic</dt>
+            <dd className="font-medium text-zinc-900 dark:text-zinc-50">{topic}</dd>
+          </div>
+        )}
+        {moduleTitle && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-zinc-500 dark:text-zinc-400">Module</dt>
+            <dd className="font-medium text-zinc-900 dark:text-zinc-50">{moduleTitle}</dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-2">
+          <dt className="text-zinc-500 dark:text-zinc-400">Evidence</dt>
+          <dd className="font-medium text-zinc-900 dark:text-zinc-50">
+            {evidenceStatus}
+          </dd>
+        </div>
         <div className="flex justify-between gap-2">
           <dt className="text-zinc-500 dark:text-zinc-400">Status</dt>
           <dd className="font-medium capitalize text-zinc-900 dark:text-zinc-50">
