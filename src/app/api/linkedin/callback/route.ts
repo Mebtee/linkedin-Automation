@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createWriteClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { log } from "@/lib/logger";
 import {
   verifyOAuthState,
@@ -80,8 +81,14 @@ export async function GET(request: Request) {
       { onConflict: "id" },
     );
 
-    // Store the LinkedIn connection (upsert for reconnect/reauth support)
-    const { error: dbError } = await upsertConnection(supabase, {
+    // Store the LinkedIn connection (upsert for reconnect/reauth support).
+    // Runs under the service-role client: the token-privileges hardening
+    // migration revokes table-level SELECT from authenticated, and PostgreSQL
+    // requires table-level SELECT for `INSERT ... ON CONFLICT` upserts. Using
+    // the admin client keeps the "client can never read access_token" property
+    // while letting the server persist the connection. Ownership was already
+    // verified above (signed state matches the session user).
+    const { error: dbError } = await upsertConnection(createAdminClient(), {
       profile_id: user.id,
       linkedin_sub: userInfo.sub,
       access_token: tokenResponse.access_token,
@@ -95,6 +102,7 @@ export async function GET(request: Request) {
       log.error("linkedin.connection_store_failed", {
         mode: payload.mode,
         profileId: user.id,
+        dbError,
       });
       settingsUrl.searchParams.set("linkedin", "db_error");
       return NextResponse.redirect(settingsUrl);
