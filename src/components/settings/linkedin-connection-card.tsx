@@ -40,14 +40,7 @@ const CALLBACK_MESSAGES: Record<string, string> = {
 function readCallbackMessage(): string | null {
   const params = new URLSearchParams(window.location.search);
   const result = params.get("linkedin");
-
   if (!result) return null;
-
-  // Clean up URL params
-  const url = new URL(window.location.href);
-  url.searchParams.delete("linkedin");
-  window.history.replaceState({}, "", url.toString());
-
   return CALLBACK_MESSAGES[result] ?? "Unknown result.";
 }
 
@@ -56,6 +49,18 @@ export function LinkedInConnectionCard() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(() => readCallbackMessage());
+
+  // Strip the transient ?linkedin=... query param after reading it. Must run
+  // in an effect (not during render) because history.replaceState triggers a
+  // Next.js Router update — doing it while rendering would warn "Cannot
+  // update a component (`Router`) while rendering a different component".
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("linkedin")) return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("linkedin");
+    window.history.replaceState({}, "", url.toString());
+  }, [message]);
 
   useEffect(() => {
     let cancelled = false;
