@@ -9,12 +9,17 @@ const mockDelete = vi.fn();
 const mockGenerateForDay = vi.fn();
 const mockGenerateForMaterial = vi.fn();
 const mockSelectBest = vi.fn();
+const mockGenerateFromOpportunity = vi.fn();
 
 vi.mock("@/services/recruiter/persistence", () => ({
   listContentOpportunities: (...a: unknown[]) => mockList(...a),
   getContentOpportunity: (...a: unknown[]) => mockGet(...a),
   updateContentOpportunityStatus: (...a: unknown[]) => mockUpdateStatus(...a),
   deleteContentOpportunity: (...a: unknown[]) => mockDelete(...a),
+}));
+
+vi.mock("@/services/recruiter/generation", () => ({
+  generatePostFromOpportunity: (...a: unknown[]) => mockGenerateFromOpportunity(...a),
 }));
 
 vi.mock("@/services/recruiter", () => ({
@@ -27,6 +32,7 @@ import {
   deleteContentOpportunityAction,
   generateContentOpportunitiesForCourseMaterialAction,
   generateContentOpportunitiesForDayAction,
+  generatePostFromOpportunityAction,
   getContentOpportunityAction,
   listContentOpportunitiesAction,
   selectBestContentOpportunityAction,
@@ -163,5 +169,103 @@ describe("content-opportunities server actions (Phase 5B)", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toContain("Status cannot change");
+  });
+});
+
+// ─── Post Generation From an Opportunity (Phase 5C) ─────────────────────────
+
+describe("content-opportunities server actions — generatePostFromOpportunityAction (Phase 5C)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const postRow = {
+    id: "post-1",
+    profile_id: "user-1",
+    journal_entry_id: "entry-1",
+    day_number: 12,
+    status: "draft" as const,
+    format: "project" as const,
+    opening: "Building Todos API.",
+    body: "The API tracks tasks.",
+    takeaway: "Endpoints need tests.",
+    next_step: "Add pagination.",
+    hashtags: ["#FullStackDevelopment", "#105DaysOfCode"],
+    image_headline: "Building Todos API",
+    image_subheadline: null,
+    image_keywords: [],
+    image_visual_concept: null,
+    image_template: "learner-progress",
+    provider: "fallback",
+    model: "template-v1",
+    tokens_used: null,
+    content_hash: "hash-1",
+    opportunity_id: "op-1",
+    linkedin_post_id: null,
+    published_at: null,
+    publish_error: null,
+    created_at: "2026-08-27T10:00:00Z",
+    updated_at: "2026-08-27T10:00:00Z",
+  };
+
+  it("returns the generated post with created/duplicate flags on success", async () => {
+    mockGenerateFromOpportunity.mockResolvedValue({
+      ok: true,
+      post: postRow,
+      created: true,
+      duplicate: false,
+    });
+
+    const result = await generatePostFromOpportunityAction("op-1");
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.post.id).toBe("post-1");
+    expect(result.created).toBe(true);
+    expect(result.duplicate).toBe(false);
+    expect(mockGenerateFromOpportunity).toHaveBeenCalledWith("op-1");
+  });
+
+  it("reports a duplicate cleanly without generating twice", async () => {
+    mockGenerateFromOpportunity.mockResolvedValue({
+      ok: true,
+      post: postRow,
+      created: false,
+      duplicate: true,
+    });
+
+    const result = await generatePostFromOpportunityAction("op-1");
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.duplicate).toBe(true);
+  });
+
+  it("maps service failures to a false result with a stable code", async () => {
+    mockGenerateFromOpportunity.mockResolvedValue({
+      ok: false,
+      code: "INSUFFICIENT_EVIDENCE",
+      message: "Project Showcase posts require USER_CONFIRMED evidence.",
+    });
+
+    const result = await generatePostFromOpportunityAction("op-1");
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.code).toBe("INSUFFICIENT_EVIDENCE");
+    expect(result.error).toContain("USER_CONFIRMED");
+  });
+
+  it("never leaks secrets from an unexpected generation failure", async () => {
+    mockGenerateFromOpportunity.mockResolvedValue({
+      ok: false,
+      code: "GENERATION_FAILED",
+      message: "Post generation from this opportunity failed. Please try again.",
+    });
+
+    const result = await generatePostFromOpportunityAction("op-1");
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.code).toBe("GENERATION_FAILED");
+    expect(result.error).not.toMatch(/sk_|api[_-]?key|token|bearer/i);
+    expect(result).not.toHaveProperty("post");
   });
 });

@@ -14,6 +14,7 @@ export const app = {
     { href: "/curriculum", label: "Curriculum" },
     { href: "/journal", label: "Journal" },
     { href: "/course-materials", label: "Materials" },
+    { href: "/opportunities", label: "Opportunities" },
     { href: "/posts", label: "Posts" },
     { href: "/schedule", label: "Schedule" },
     { href: "/settings", label: "Settings" },

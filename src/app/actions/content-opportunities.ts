@@ -6,12 +6,14 @@ import type {
   ContentOpportunitySourceKind,
   ContentOpportunityStatus,
 } from "@/types/content-opportunity";
+import type { GeneratedPostRow } from "@/types/generated-post";
 import {
   deleteContentOpportunity,
   getContentOpportunity,
   listContentOpportunities,
   updateContentOpportunityStatus,
 } from "@/services/recruiter/persistence";
+import { generatePostFromOpportunity } from "@/services/recruiter/generation";
 import {
   generateContentOpportunitiesForCourseMaterial,
   generateContentOpportunitiesForDay,
@@ -163,4 +165,34 @@ export async function deleteContentOpportunityAction(
       error: err instanceof Error ? err.message : "Could not delete the content opportunity.",
     };
   }
+}
+
+// ─── Post Generation From an Opportunity (Phase 5C) ──────────────────────────
+
+export type GeneratePostFromOpportunityActionResult =
+  | { success: true; post: GeneratedPostRow; created: boolean; duplicate: boolean }
+  | { success: false; error: string; code?: string };
+
+/**
+ * Generates a draft LinkedIn post from a selected content opportunity by
+ * delegating to the shared generation pipeline. The opportunity is advanced to
+ * `generated` only when the post is successfully persisted. Generation never
+ * auto-approves or auto-publishes — the post stays a draft for the `/posts/[id]`
+ * editor.
+ */
+export async function generatePostFromOpportunityAction(
+  opportunityId: string,
+): Promise<GeneratePostFromOpportunityActionResult> {
+  const result = await generatePostFromOpportunity(opportunityId);
+
+  if (!result.ok) {
+    return { success: false, error: result.message, code: result.code };
+  }
+
+  return {
+    success: true,
+    post: result.post,
+    created: result.created,
+    duplicate: result.duplicate,
+  };
 }

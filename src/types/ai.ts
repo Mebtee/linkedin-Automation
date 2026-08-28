@@ -1,4 +1,5 @@
 import { AppError } from "@/lib/utils/errors";
+import type { RecruiterPostGenerationContext } from "./content-opportunity";
 
 // ─── Post Format ────────────────────────────────────────────────────────────
 
@@ -83,6 +84,13 @@ export interface PostGenerationInput {
   readonly brandVoice: BrandVoice;
   readonly format: PostFormat;
   readonly rules: ContentRules;
+  /**
+   * Optional recruiter-focused context (Phase 5C). Present when the post is
+   * generated from a selected ContentOpportunity. When present, this context
+   * is the PRIMARY content direction: the provider must write about the
+   * selected opportunity and may only use the supplied evidence.
+   */
+  readonly recruiter?: RecruiterPostGenerationContext;
 }
 
 // ─── Generated Post ─────────────────────────────────────────────────────────

@@ -149,6 +149,7 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 | `model` | `text` | NOT NULL | AI model name |
 | `tokens_used` | `integer` | nullable | Token count (if available) |
 | `content_hash` | `text` | NOT NULL | SHA-256 hash for duplicate detection |
+| `opportunity_id` | `uuid` | nullable, FK → `content_opportunities(id)` ON DELETE SET NULL | Source content opportunity (Phase 5C) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` | Row creation time |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()` | Auto-updated via trigger |
 
@@ -158,6 +159,9 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 - `day_number` FK references `curriculum_days(day_number)` — must be a valid day (1–105)
 - `journal_entry_id` FK references `daily_learning_entries(id)` — must be a valid journal entry
 - `profile_id` FK references `profiles(id)` — cascade delete when profile is removed
+- `opportunity_id` (Phase 5C) is nullable so legacy posts are untouched; deleting an
+  opportunity nulls the link via `ON DELETE SET NULL`. The `gp_opportunity_ownership`
+  trigger enforces that an attached opportunity belongs to the same profile as the post.
 
 **Indexes:**
 - `idx_gp_profile_id` on `(profile_id)` — all posts for a user
@@ -166,6 +170,7 @@ AI-generated LinkedIn content derived from journal entries. Each post is created
 - `idx_gp_profile_status` on `(profile_id, status)` — filter by status
 - `idx_gp_journal_entry_id` on `(journal_entry_id)` — posts from a journal entry
 - `idx_gp_content_hash` on `(content_hash)` — duplicate detection
+- `idx_gp_opportunity_id` on `(opportunity_id)` — look up posts by opportunity
 
 **Status lifecycle:**
 - `draft` → `approved` → `published`
@@ -387,7 +392,7 @@ profiles
 profiles ── 1:N (profile_id FK) ──► content_opportunities
   ├── source: daily_learning_entries (journal path, confirmed)
   ├── source: course_materials (proposal path, unconfirmed → learning-only)
-  └── feeds: generated_posts in later phases (no FK yet)
+  └── feeds: generated_posts via generated_posts.opportunity_id (Phase 5C)
 ```
 
 - A **profile** belongs to one `auth.users` row (owned by Supabase Auth).
@@ -404,10 +409,12 @@ profiles ── 1:N (profile_id FK) ──► content_opportunities
 - A **scheduled_post** references one **generated_post** (via `post_id` FK) and one **profile** (via `profile_id` FK).
 - A **profile** has many **course_materials** (via `profile_id` FK); a course material has many **course_material_pages** (via `course_material_id` FK).
 - A **profile** has many **content_opportunities** (via `profile_id` FK), sourced from `daily_learning_entries` (journal path) or `course_materials` (proposal path).
+- A **generated_post** references zero or one **content_opportunity** (via `opportunity_id` FK, `ON DELETE SET NULL`, Phase 5C).
 - `ON DELETE RESTRICT` on `curriculum_days.module_id` prevents deleting a module that still has days.
 - `ON DELETE RESTRICT` on `daily_learning_entries.day_number` prevents deleting a curriculum day that has journal entries.
 - `ON DELETE RESTRICT` on `generated_posts.day_number` prevents deleting a curriculum day that has generated posts.
 - `ON DELETE CASCADE` on `generated_posts.journal_entry_id` removes posts when their source journal entry is deleted.
+- `ON DELETE SET NULL` on `generated_posts.opportunity_id` keeps posts when their source opportunity is deleted (Phase 5C).
 
 ---
 
@@ -425,6 +432,7 @@ profiles ── 1:N (profile_id FK) ──► content_opportunities
 | `scheduled_posts_set_updated_at` | `scheduled_posts` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `course_materials_set_updated_at` | `course_materials` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
 | `content_opportunities_set_updated_at` | `content_opportunities` | `handle_updated_at()` | Auto-sets `updated_at` on UPDATE |
+| `gp_opportunity_ownership` | `generated_posts` | `gp_check_opportunity_ownership()` | Phase 5C: rejects INSERT/UPDATE when an attached `opportunity_id` belongs to a different profile than the post |
 
 The `handle_updated_at()` function sets `NEW.updated_at = now()` before each UPDATE.
 

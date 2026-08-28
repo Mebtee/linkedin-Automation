@@ -220,6 +220,49 @@ select * from (values
                           'scheduled_posts','daily_learning_entries','course_materials',
                           'course_material_pages')
         and 'anon' = any(roles)
+    ) then 'PASS' else 'FAIL' end),
+
+  -- ─── Phase 5B — content_opportunities ────────────────────────────────────
+  ('57. content_opportunities has RLS enabled',
+    case when (select relrowsecurity from pg_class where relname = 'content_opportunities' and relnamespace = 'public'::regnamespace) then 'PASS' else 'FAIL' end),
+  ('58. content_opportunities SELECT is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'content_opportunities' and policyname = 'co_select_own' and qual = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('59. content_opportunities INSERT is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'content_opportunities' and policyname = 'co_insert_own' and with_check = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('60. content_opportunities UPDATE is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'content_opportunities' and policyname = 'co_update_own' and qual = '(auth.uid() = profile_id)' and with_check = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('61. content_opportunities DELETE is owner-only',
+    case when exists (select 1 from pg_policies where tablename = 'content_opportunities' and policyname = 'co_delete_own' and qual = '(auth.uid() = profile_id)') then 'PASS' else 'FAIL' end),
+  ('61b. No anon access on content_opportunities',
+    case when not exists (select 1 from pg_policies where tablename = 'content_opportunities' and 'anon' = any(roles)) then 'PASS' else 'FAIL' end),
+
+  -- ─── Phase 5C — generated_posts.opportunity_id ───────────────────────────
+  ('62. generated_posts has opportunity_id column',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts' and column_name = 'opportunity_id'
+    ) then 'PASS' else 'FAIL' end),
+  ('62b. opportunity_id is nullable (existing posts untouched)',
+    case when exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'generated_posts'
+        and column_name = 'opportunity_id' and is_nullable = 'YES'
+    ) then 'PASS' else 'FAIL' end),
+  ('63. generated_posts.opportunity_id FK → content_opportunities ON DELETE SET NULL',
+    case when exists (
+      select 1
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      where c.contype = 'f'
+        and c.conrelid = 'generated_posts'::regclass
+        and c.confrelid = 'content_opportunities'::regclass
+        and a.attname = 'opportunity_id'
+        and c.confdeltype = 'n'
+    ) then 'PASS' else 'FAIL' end),
+  ('64. generated_posts opportunity ownership trigger exists',
+    case when exists (
+      select 1 from pg_trigger
+      where tgrelid = 'generated_posts'::regclass and tgname = 'gp_opportunity_ownership'
     ) then 'PASS' else 'FAIL' end)
 ) as t(test, status);
 

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AppError } from "@/lib/utils/errors";
-import type { PostFormat } from "@/types/ai";
+import type { PostFormat, PostGenerationInput } from "@/types/ai";
 import type { GeneratedPostRow, CreateGeneratedPostInput } from "@/types/generated-post";
 import type { JournalEntry } from "@/types/journal";
 import type { CurriculumDayRow } from "@/services/curriculum/dayProgress";
@@ -97,7 +97,120 @@ async function loadJournalEntry(
   return data as JournalEntry;
 }
 
-// ─── Main Generation Function ────────────────────────────────────────────────
+// Export the loaders so the recruiter opportunity path (Phase 5C) reuses the
+// exact same helpers as the daily path — there is only one pipeline.
+export {
+  loadCurriculumDay as loadCurriculumDayForRecruiter,
+  loadModule as loadModuleForRecruiter,
+  loadJournalEntry as loadJournalEntryForRecruiter,
+};
+
+// ─── Shared Generation Core (Phase 5C) ───────────────────────────────────────
+// The provider-call → validate → hash → duplicate-check → persist core shared
+// by the daily path (generatePostForDay) and the recruiter opportunity path
+// (src/services/recruiter/generation.ts). Both paths build a PostGenerationInput
+// and delegate here — there is exactly ONE generation pipeline.
+
+export type GeneratePostCoreParams = {
+  readonly dayNumber: number;
+  readonly journalEntryId: string;
+  readonly format: PostFormat;
+  readonly input: PostGenerationInput;
+  /** Optional link to the content opportunity producing this post (Phase 5C). */
+  readonly opportunityId?: string | null;
+};
+
+/**
+ * Runs the shared generation pipeline for a prepared PostGenerationInput:
+ * authenticates, calls the configured AI provider, validates its output,
+ * computes the content hash, enforces the existing day/format/hash duplicate
+ * protection, and persists a `draft` generated post.
+ *
+ * Generation never auto-approves or auto-publishes.
+ */
+export async function generatePostFromPreparedInput(
+  params: GeneratePostCoreParams,
+): Promise<GeneratedPostRow> {
+  const { dayNumber, journalEntryId, format, input, opportunityId } = params;
+
+  const supabase = await createClient();
+  const user = await requireAuth(supabase);
+
+  // 1. Call AI provider
+  const provider = getTextGenerationProvider();
+  let result;
+  try {
+    result = await provider.generatePost(input);
+  } catch (err) {
+    throw new AppError(
+      `Post generation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      { code: "GENERATION_FAILED", cause: err },
+    );
+  }
+
+  // 2. Validate provider output
+  let validatedPayload;
+  try {
+    validatedPayload = validateGeneratedPostPayload(result.payload);
+  } catch (err) {
+    throw new AppError(
+      `Provider returned invalid output: ${err instanceof Error ? err.message : "Validation failed"}`,
+      { code: "GENERATION_FAILED", cause: err },
+    );
+  }
+
+  // 3. Calculate content hash
+  const contentHash = createContentHash({
+    opening: validatedPayload.post.opening,
+    body: validatedPayload.post.body,
+    takeaway: validatedPayload.post.takeaway,
+    nextStep: validatedPayload.post.nextStep,
+    hashtags: validatedPayload.post.hashtags,
+  });
+
+  // 4. Check for duplicates (existing day/format/content-hash protection)
+  const isDuplicate = await checkDuplicatePost(
+    user.id,
+    dayNumber,
+    format,
+    contentHash,
+  );
+
+  if (isDuplicate) {
+    throw new AppError(
+      "A generated post with identical content already exists for this day and format.",
+      { code: "GENERATION_DUPLICATE" },
+    );
+  }
+
+  // 5. Persist
+  const createInput: CreateGeneratedPostInput = {
+    journal_entry_id: journalEntryId,
+    day_number: dayNumber,
+    format,
+    opening: validatedPayload.post.opening,
+    body: validatedPayload.post.body,
+    takeaway: validatedPayload.post.takeaway,
+    next_step: validatedPayload.post.nextStep,
+    hashtags: validatedPayload.post.hashtags,
+    image_headline: validatedPayload.image.headline,
+    image_subheadline: validatedPayload.image.subheadline,
+    image_keywords: [...validatedPayload.image.keywords],
+    image_visual_concept: validatedPayload.image.visualConcept,
+    image_template: validatedPayload.image.template,
+    provider: result.metadata.provider,
+    model: result.metadata.model,
+    tokens_used: result.metadata.tokensUsed ?? null,
+    content_hash: contentHash,
+    opportunity_id: opportunityId ?? null,
+  };
+
+  const savedPost = await createGeneratedPost(createInput);
+
+  return savedPost;
+}
+
+// ─── Main Generation Function (existing daily path) ──────────────────────────
 
 /**
  * Generates a LinkedIn post for a specific curriculum day.
@@ -109,12 +222,8 @@ async function loadJournalEntry(
  *   4. Load journal entry (must be submitted)
  *   5. Build PostGenerationInput
  *   6. Select post format
- *   7. Call AI provider
- *   8. Validate provider output
- *   9. Calculate content hash
- *  10. Check for duplicates
- *  11. Persist generated post
- *  12. Return saved post
+ *   7. Delegate to the shared generation core
+ *   8. Return saved post
  *
  * The generated post always starts as "draft".
  * Generation never auto-approves or auto-publishes.
@@ -163,75 +272,11 @@ export async function generatePostForDay(
     format: selectedFormat,
   });
 
-  // 9. Call AI provider
-  const provider = getTextGenerationProvider();
-  let result;
-  try {
-    result = await provider.generatePost(input);
-  } catch (err) {
-    throw new AppError(
-      `Post generation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      { code: "GENERATION_FAILED", cause: err },
-    );
-  }
-
-  // 10. Validate provider output
-  let validatedPayload;
-  try {
-    validatedPayload = validateGeneratedPostPayload(result.payload);
-  } catch (err) {
-    throw new AppError(
-      `Provider returned invalid output: ${err instanceof Error ? err.message : "Validation failed"}`,
-      { code: "GENERATION_FAILED", cause: err },
-    );
-  }
-
-  // 11. Calculate content hash
-  const contentHash = createContentHash({
-    opening: validatedPayload.post.opening,
-    body: validatedPayload.post.body,
-    takeaway: validatedPayload.post.takeaway,
-    nextStep: validatedPayload.post.nextStep,
-    hashtags: validatedPayload.post.hashtags,
-  });
-
-  // 12. Check for duplicates
-  const isDuplicate = await checkDuplicatePost(
-    user.id,
+  // 9–13. Delegate to the shared core (provider, validation, hash, dupes, persist)
+  return generatePostFromPreparedInput({
     dayNumber,
-    selectedFormat,
-    contentHash,
-  );
-
-  if (isDuplicate) {
-    throw new AppError(
-      "A generated post with identical content already exists for this day and format.",
-      { code: "GENERATION_DUPLICATE" },
-    );
-  }
-
-  // 13. Persist
-  const createInput: CreateGeneratedPostInput = {
-    journal_entry_id: journal.id,
-    day_number: dayNumber,
+    journalEntryId: journal.id,
     format: selectedFormat,
-    opening: validatedPayload.post.opening,
-    body: validatedPayload.post.body,
-    takeaway: validatedPayload.post.takeaway,
-    next_step: validatedPayload.post.nextStep,
-    hashtags: validatedPayload.post.hashtags,
-    image_headline: validatedPayload.image.headline,
-    image_subheadline: validatedPayload.image.subheadline,
-    image_keywords: [...validatedPayload.image.keywords],
-    image_visual_concept: validatedPayload.image.visualConcept,
-    image_template: validatedPayload.image.template,
-    provider: result.metadata.provider,
-    model: result.metadata.model,
-    tokens_used: result.metadata.tokensUsed ?? null,
-    content_hash: contentHash,
-  };
-
-  const savedPost = await createGeneratedPost(createInput);
-
-  return savedPost;
+    input,
+  });
 }

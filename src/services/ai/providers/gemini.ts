@@ -5,7 +5,9 @@ import type {
   GeneratedPostPayload,
 } from "@/types/ai";
 import { AIError } from "@/types/ai";
+import type { RecruiterPostGenerationContext } from "@/types/content-opportunity";
 import { validateGeneratedPostPayload } from "@/services/ai/validation";
+import { POST_TYPE_META } from "@/config/recruiter";
 import { TemplateFallbackProvider } from "./fallback";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -124,12 +126,38 @@ export class GeminiTextProvider implements TextGenerationProvider {
 
   buildPrompt(input: PostGenerationInput): string {
     const { curriculum, journal, brandVoice, format, rules } = input;
+    const recruiter = input.recruiter;
+
+    const audience = recruiter
+      ? "You are writing a LinkedIn post for a junior/full-stack developer who is building a public portfolio and wants their profile to be useful to recruiters.\nThe purpose is not to sound like an expert.\nThe purpose is to clearly demonstrate: real work, technical growth, problem solving, consistency, practical understanding, and honest learning."
+      : `You are generating a LinkedIn post for someone on Day ${curriculum.dayNumber} of a 105-day full-stack development learning journey.`;
 
     const journalSection = this.buildJournalSection(journal);
     const curriculumSection = this.buildCurriculumSection(curriculum);
-    const formatSection = this.buildFormatSection(format);
+    const formatSection = recruiter
+      ? this.buildRecruiterFormatSection(recruiter)
+      : this.buildFormatSection(format);
+    const recruiterSection = recruiter
+      ? this.buildRecruiterSection(recruiter)
+      : "";
+    const guidelines = recruiter
+      ? this.buildRecruiterGuidelines()
+      : `- Write in first-person beginner voice ("I learned...", "I practiced...")
+- Never claim mastery or expertise
+- Never invent information not present in the journal or curriculum
+- Be authentic and honest about the learning experience
+- Use short, simple sentences
+- Sound like a real person documenting their daily progress`;
+    const hashtagSection = recruiter
+      ? this.buildRecruiterHashtagRequirements(recruiter, rules.maxHashtags)
+      : `## Hashtag Requirements
+- MUST include #105DaysOfCode
+- MUST include #FullStackDevelopment
+- Add 1–3 additional topic-relevant hashtags
+- Maximum ${rules.maxHashtags} hashtags total
+- Each hashtag must start with #`;
 
-    return `You are generating a LinkedIn post for someone on Day ${curriculum.dayNumber} of a 105-day full-stack development learning journey.
+    return `${audience}
 
 ## Brand Voice
 - Tone: ${brandVoice.tone.join(", ")}
@@ -145,6 +173,7 @@ export class GeminiTextProvider implements TextGenerationProvider {
 - No unsupported claims
 - Never invent project results, technologies, problems, or achievements
 - Never claim mastery or expertise — this is a beginner learning journey
+${recruiterSection}
 
 ## Curriculum Context
 ${curriculumSection}
@@ -156,12 +185,7 @@ ${journalSection}
 ${formatSection}
 
 ## Important Guidelines
-- Write in first-person beginner voice ("I learned...", "I practiced...")
-- Never claim mastery or expertise
-- Never invent information not present in the journal or curriculum
-- Be authentic and honest about the learning experience
-- Use short, simple sentences
-- Sound like a real person documenting their daily progress
+${guidelines}
 
 ## Required JSON Output
 Return ONLY valid JSON matching this exact structure — no markdown, no code fences, no extra text:
@@ -183,12 +207,7 @@ Return ONLY valid JSON matching this exact structure — no markdown, no code fe
   }
 }
 
-## Hashtag Requirements
-- MUST include #105DaysOfCode
-- MUST include #FullStackDevelopment
-- Add 1–3 additional topic-relevant hashtags
-- Maximum ${rules.maxHashtags} hashtags total
-- Each hashtag must start with #
+${hashtagSection}
 
 ## Image Template Selection
 Choose the most appropriate template based on the content:
@@ -199,6 +218,100 @@ Choose the most appropriate template based on the content:
 - "large-number" — for milestone day numbers
 - "progress" — for milestone checkpoints (day 25, 50, 75)
 - "final-milestone" — only for day 105`;
+  }
+
+  // ─── Recruiter-Aware Output Enhancements (Phase 5C) ──────────────────────
+
+  /**
+   * Builds the "Selected Content Opportunity + Evidence" prompt section for a
+   * recruiter-driven generation. The selected opportunity is the primary
+   * content direction; the evidence is the ONLY allowed ground truth.
+   */
+  private buildRecruiterSection(recruiter: RecruiterPostGenerationContext): string {
+    const meta = POST_TYPE_META[recruiter.postType];
+    const parts: string[] = [
+      "## Selected Content Opportunity",
+      `- Post type: ${recruiter.postType} (${meta.label})`,
+      `- Title: ${recruiter.title}`,
+      `- Content goal: ${recruiter.contentGoal}`,
+      `- Recruiter score: ${recruiter.recruiterScore}/100`,
+      `- Selection reason: ${recruiter.selectionReason ?? "—"}`,
+      `- Evidence strength: ${recruiter.evidenceStrength}`,
+      `- Personal-experience claims allowed: ${
+        recruiter.personalExperience
+          ? "YES but ONLY from USER_CONFIRMED evidence"
+          : "NO — learning content only"
+      }`,
+      "",
+      "This selected opportunity is the ONLY story to write about. Do not change the topic and do not drift into another subject.",
+      "",
+      "## Evidence (ground truth — never fabricate anything beyond this)",
+      "For each evidence field below, the exact user-provided text and its confidence level:",
+    ];
+
+    for (const entry of recruiter.evidence) {
+      const pages =
+        entry.pageNumbers.length > 0
+          ? ` (PDF pages: ${entry.pageNumbers.join(", ")})`
+          : "";
+      parts.push(
+        `- ${entry.field}: "${entry.value ?? "(no text)"}" — confidence: ${entry.confidence}${pages}`,
+      );
+    }
+    if (recruiter.evidence.length === 0) {
+      parts.push("- (No evidence references — learning content only, describe the topic without claiming personal work)");
+    }
+
+    parts.push(
+      "",
+      "Claim rules by confidence level:",
+      "- USER_CONFIRMED: may support first-person personal experience (\"I built\", \"I solved\", \"I deployed\").",
+      "- SUPPORTED_BY_PDF: describes what the course/material teaches. It must NOT automatically become a claim that the user personally completed or built it.",
+      "- INFERRED_FROM_STRUCTURE: provides contextual learning information only. Can never support a personal achievement claim.",
+      "- MISSING: cannot support a factual personal claim.",
+    );
+
+    return parts.join("\n");
+  }
+
+  private buildRecruiterFormatSection(recruiter: RecruiterPostGenerationContext): string {
+    const meta = POST_TYPE_META[recruiter.postType];
+    const steps = meta.structure.map((step, i) => `${i + 1}. ${step}`).join("\n");
+    return `Follow this ${meta.label} post structure exactly:\n${steps}`;
+  }
+
+  private buildRecruiterGuidelines(): string {
+    return `- Write in an authentic first-person beginner/developer voice
+- The selected opportunity is the ONLY content direction; never switch to a generic topic
+- Never exaggerate experience
+- Never claim mastery
+- Never invent projects
+- Never invent technologies
+- Never invent results
+- Never invent metrics
+- Never invent deployment
+- Never invent users
+- Never invent performance improvements
+- Never invent problems or solutions
+- Use only information supported by the supplied evidence and journal
+- When evidence is insufficient for a personal claim, describe the topic as learning rather than personal achievement
+- Use short, simple sentences
+- Sound like a real developer learning in public`;
+  }
+
+  private buildRecruiterHashtagRequirements(
+    recruiter: RecruiterPostGenerationContext,
+    maxHashtags: number,
+  ): string {
+    const focus = POST_TYPE_META[recruiter.postType].hashtagFocus
+      .join(", ");
+    return `## Hashtag Requirements
+- MUST include #FullStackDevelopment
+- MUST include #105DaysOfCode (this post is part of the 105-day learning journey)
+- Add 1–3 additional topic-relevant hashtags. Suggested focus: ${focus || "#FullStackDevelopment"}
+- Maximum ${maxHashtags} hashtags total
+- Do not add irrelevant popular hashtags just to reach more people
+- Each hashtag must start with #`;
   }
 
   private buildCurriculumSection(curriculum: PostGenerationInput["curriculum"]): string {

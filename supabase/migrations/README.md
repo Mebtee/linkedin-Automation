@@ -10,6 +10,7 @@ named `YYYYMMDDHHMMSS_name.sql` (created with `supabase migration new <name>`).
 | `20260817000000_initial_schema.sql` | Core tables: `profiles`, `modules`, `curriculum_days` + triggers, indexes |
 | `20260817100000_rls_policies.sql` | Row Level Security: owner-only profiles, read-only curriculum for auth users |
 | `20260827000000_content_opportunities.sql` | Phase 5B: `content_opportunities` — scored, deduplicated evidence-derived content candidates (owner-only RLS) |
+| `20260828000000_generated_posts_opportunity.sql` | Phase 5C: `generated_posts.opportunity_id` (nullable FK → `content_opportunities`, `ON DELETE SET NULL`), index, ownership trigger |
 
 ## Applying Migrations
 

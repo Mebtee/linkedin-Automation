@@ -124,6 +124,7 @@ const mockSavedPost = {
   model: "template-v1",
   tokens_used: null,
   content_hash: "mock-hash-abc123",
+  opportunity_id: null,
   created_at: "2026-08-17T10:00:00Z",
   updated_at: "2026-08-17T10:00:00Z",
 };

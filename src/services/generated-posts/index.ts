@@ -137,6 +137,7 @@ export async function createGeneratedPost(
       model: validated.model,
       tokens_used: validated.tokens_used ?? null,
       content_hash: validated.content_hash,
+      opportunity_id: validated.opportunity_id ?? null,
     })
     .select()
     .single();
@@ -373,6 +374,42 @@ export async function checkDuplicatePost(
   }
 
   return (count ?? 0) > 0;
+}
+
+/**
+ * Returns the most recent generated post already linked to a content
+ * opportunity (Phase 5C duplicate protection). Owner-scoped: a user can only
+ * ever find their own posts, so a foreign opportunity can never be observed.
+ */
+export async function findGeneratedPostByOpportunity(
+  opportunityId: string,
+): Promise<GeneratedPostRow | null> {
+  const supabase = await createClient();
+
+  let userId: string;
+  try {
+    const user = await requireAuth(supabase);
+    userId = user.id;
+  } catch {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("generated_posts")
+    .select("*")
+    .eq("profile_id", userId)
+    .eq("opportunity_id", opportunityId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError("Failed to check for an existing opportunity post.", {
+      code: "DATABASE_ERROR",
+    });
+  }
+
+  return (data ?? null) as GeneratedPostRow | null;
 }
 
 // ─── Publish State ──────────────────────────────────────────────────────────

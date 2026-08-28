@@ -27,6 +27,7 @@ export type GeneratedPostRow = {
   readonly model: string;
   readonly tokens_used: number | null;
   readonly content_hash: string;
+  readonly opportunity_id: string | null;
   readonly linkedin_post_id: string | null;
   readonly published_at: string | null;
   readonly publish_error: string | null;
@@ -54,6 +55,8 @@ export type CreateGeneratedPostInput = {
   readonly model: string;
   readonly tokens_used?: number | null;
   readonly content_hash: string;
+  /** Optional link to the content opportunity that produced this post (Phase 5C). */
+  readonly opportunity_id?: string | null;
 };
 
 // ─── Update Input ────────────────────────────────────────────────────────────

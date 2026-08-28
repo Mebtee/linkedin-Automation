@@ -33,6 +33,7 @@ function makePost(overrides: Partial<GeneratedPostRow> = {}): GeneratedPostRow {
     model: "template-v1",
     tokens_used: null,
     content_hash: "abc123",
+    opportunity_id: null,
     linkedin_post_id: null,
     published_at: null,
     publish_error: null,

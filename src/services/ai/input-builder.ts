@@ -4,6 +4,7 @@ import type {
   JournalContext,
   PostFormat,
 } from "@/types/ai";
+import type { RecruiterPostGenerationContext } from "@/types/content-opportunity";
 import type { JournalEntry } from "@/types/journal";
 import { content } from "@/config/content";
 
@@ -80,8 +81,10 @@ export function buildPostGenerationInput(params: {
   readonly module: ModuleForInput;
   readonly journal: JournalEntry;
   readonly format: PostFormat;
+  /** Optional recruiter-focused context (Phase 5C). */
+  readonly recruiter?: RecruiterPostGenerationContext;
 }): PostGenerationInput {
-  const { curriculumDay, module, journal, format } = params;
+  const { curriculumDay, module, journal, format, recruiter } = params;
 
   const curriculum: CurriculumContext = {
     dayNumber: curriculumDay.day_number,
@@ -116,5 +119,6 @@ export function buildPostGenerationInput(params: {
     brandVoice: content.brandVoice,
     format,
     rules: content.rules,
+    ...(recruiter ? { recruiter } : {}),
   };
 }

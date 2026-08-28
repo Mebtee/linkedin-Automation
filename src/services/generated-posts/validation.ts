@@ -132,6 +132,14 @@ export function validateCreateInput(input: unknown): CreateGeneratedPostInput {
     throw new AppError("content_hash is required.", { code: "VALIDATION_ERROR" });
   }
 
+  if (obj.opportunity_id !== undefined && obj.opportunity_id !== null) {
+    if (typeof obj.opportunity_id !== "string" || obj.opportunity_id.trim() === "") {
+      throw new AppError("opportunity_id must be a non-empty string.", {
+        code: "VALIDATION_ERROR",
+      });
+    }
+  }
+
   return input as CreateGeneratedPostInput;
 }
 

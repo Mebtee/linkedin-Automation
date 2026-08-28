@@ -13,7 +13,7 @@
 // - Missing evidence never increases any score.
 
 import type { EvidenceType } from "./course-material";
-import type { PostFormat } from "./ai";
+import type { JournalContext, PostFormat } from "./ai";
 
 // ─── Post Taxonomy ───────────────────────────────────────────────────────────
 
@@ -243,4 +243,48 @@ export const ALLOWED_OPPORTUNITY_STATUS_TRANSITIONS: Record<
   approved: ["published"],
   published: [],
   rejected: [],
+};
+
+// ─── Recruiter-Aware Generation Context (Phase 5C) ──────────────────────────
+// The bridge between a selected ContentOpportunity and the existing
+// PostGenerationInput. Carries the opportunity's primary content direction
+// (postType, title, summary), its deterministic score, the selection reason,
+// and the exact evidence the AI is allowed to use.
+//
+// ANTI-HALLUCINATION CONTRACT (carried from Phase 5A/5B, never weakened):
+// - `USER_CONFIRMED` evidence may support first-person personal claims.
+// - `SUPPORTED_BY_PDF` may describe what the course/material teaches but must
+//   NOT automatically become "I did X".
+// - `INFERRED_FROM_STRUCTURE` provides contextual learning info only.
+// - `MISSING` supports no factual personal claim.
+// Generated posts must never make a claim unsupported by this evidence.
+
+export type RecruiterEvidenceEntry = {
+  readonly field: string;
+  /** The exact ground-truth text from the journal / proposal for this field. */
+  readonly value: string | null;
+  readonly confidence: EvidenceType;
+  readonly pageNumbers: readonly number[];
+};
+
+export type RecruiterPostGenerationContext = {
+  readonly opportunityId: string;
+  readonly postType: PostType;
+  readonly contentGoal: ContentGoal;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly recruiterScore: number;
+  readonly recruiterScoreBreakdown: RecruiterScore | null;
+  readonly selectionReason: string | null;
+  /** Evidence references enriched with the exact supported text. */
+  readonly evidence: readonly RecruiterEvidenceEntry[];
+  /** Strength of the strongest reference backing the opportunity. */
+  readonly evidenceStrength: EvidenceType;
+  /** True when the post type claims first-person engineering work. */
+  readonly personalExperience: boolean;
+  /** Full journal context so the AI never invents missing details. */
+  readonly journal: JournalContext;
+  readonly dayNumber: number | null;
+  readonly topic: string;
+  readonly format: PostFormat;
 };
