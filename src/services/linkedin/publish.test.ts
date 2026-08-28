@@ -196,7 +196,12 @@ describe("LinkedIn Publish Service", () => {
           json: () =>
             Promise.resolve({
               value: {
-                uploadUrl: "https://api.linkedin.com/mediaUpload/UPLOAD1",
+                uploadMechanism: {
+                  "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest": {
+                    uploadUrl: "https://api.linkedin.com/mediaUpload/UPLOAD1",
+                    headers: { "Content-Type": "application/octet-stream" },
+                  },
+                },
                 asset: "urn:li:digitalmediaAsset:ASSET1",
               },
             }),
@@ -241,7 +246,9 @@ describe("LinkedIn Publish Service", () => {
       const [putUrl, putOpts] = mockFetch.mock.calls[1] as [string, RequestInit];
       expect(putUrl).toBe("https://api.linkedin.com/mediaUpload/UPLOAD1");
       expect(putOpts.method).toBe("PUT");
-      expect((putOpts.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
+      expect((putOpts.headers as Record<string, string>)["Content-Type"]).toBe(
+        "application/octet-stream",
+      );
 
       // 3. Create the UGC post referencing the asset.
       const [postUrl, postOpts] = mockFetch.mock.calls[2] as [string, RequestInit];

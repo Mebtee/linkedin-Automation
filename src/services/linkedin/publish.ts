@@ -61,11 +61,26 @@ type LinkedInErrorResponse = {
   readonly error_detail?: string;
 };
 
+type MediaUploadHttpRequest = {
+  readonly uploadUrl?: string | null;
+  readonly headers?: Record<string, string>;
+};
+
 type RegisterUploadResponse = {
   readonly value?: {
+    readonly uploadUrn?: string | null;
     readonly uploadUrl?: string | null;
     readonly asset?: string | null;
+    readonly uploadMechanism?: {
+      readonly "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"?: MediaUploadHttpRequest;
+    };
   };
+};
+
+type RegisterUploadSuccess = {
+  readonly uploadUrl: string;
+  readonly asset: string;
+  readonly headers?: Readonly<Record<string, string>>;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -130,11 +145,17 @@ async function rasterizeToPng(
 /**
  * Registers an image upload with the LinkedIn Assets API, returning the
  * pre-signed upload URL and the asset URN to reference in the post.
+ *
+ * LinkedIn returns the upload URL in one of two shapes depending on the
+ * recipe/token vintage:
+ * - Legacy: `value.uploadUrl`
+ * - Current: `value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl`
+ * Both are tolerated so either vintage can upload and publish.
  */
 async function registerImageUpload(
   accessToken: string,
   ownerUrn: string,
-): Promise<{ readonly uploadUrl: string; readonly asset: string }> {
+): Promise<RegisterUploadSuccess> {
   const response = await fetch(LINKEDIN_ASSETS_REGISTER_URL, {
     method: "POST",
     headers: {
@@ -167,29 +188,46 @@ async function registerImageUpload(
   }
 
   const data = (await response.json()) as RegisterUploadResponse;
-  const uploadUrl = data.value?.uploadUrl;
+  const mechanism = data.value?.uploadMechanism?.[
+    "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+  ];
+  const uploadUrl =
+    data.value?.uploadUrl ?? mechanism?.uploadUrl ?? undefined;
   const asset = data.value?.asset;
+  const headers = mechanism?.headers;
 
   if (!uploadUrl || !asset) {
-    throw new Error("LinkedIn image registration did not return an upload URL or asset URN.");
+    // Surface a snippet of the response so the raw payload is available in
+    // server logs when LinkedIn changes the response shape again.
+    throw new Error(
+      `LinkedIn image registration did not return an upload URL or asset URN. Response: ${JSON.stringify(data).slice(0, 500)}`,
+    );
   }
 
-  return { uploadUrl, asset };
+  return { uploadUrl, asset, headers };
 }
 
 /**
  * Uploads the image bytes to the pre-signed upload URL provided by LinkedIn.
+ * Uses any headers supplied by LinkedIn's upload mechanism, falling back to
+ * the image's own content type when none are given.
  */
 async function uploadImageBytes(
   uploadUrl: string,
   image: { readonly bytes: Uint8Array; readonly mimeType: string },
+  extraHeaders?: Readonly<Record<string, string>>,
 ): Promise<void> {
+  const headers: Record<string, string> = {
+    "Content-Length": image.bytes.byteLength.toString(),
+    ...(extraHeaders ?? {}),
+  };
+  if (!headers["Content-Type"]) {
+    headers["Content-Type"] = image.mimeType;
+  }
+
   const response = await fetch(uploadUrl, {
     method: "PUT",
-    headers: {
-      "Content-Type": image.mimeType,
-      "Content-Length": image.bytes.byteLength.toString(),
-    },
+    headers,
     body: image.bytes.buffer as ArrayBuffer,
   });
 
@@ -268,11 +306,11 @@ export async function publishToLinkedIn(
 
     if (image) {
       const rasterized = await rasterizeToPng(image);
-      const { uploadUrl, asset } = await registerImageUpload(
+      const { uploadUrl, asset, headers } = await registerImageUpload(
         accessToken,
         memberUrn,
       );
-      await uploadImageBytes(uploadUrl, rasterized);
+      await uploadImageBytes(uploadUrl, rasterized, headers);
       shareMediaCategory = "IMAGE";
       media = [
         {
