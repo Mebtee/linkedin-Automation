@@ -11,6 +11,7 @@ import {
 import { generatePostForDay } from "@/services/ai/generation";
 import { getAccessToken, buildMemberUrn, publishToLinkedIn } from "@/services/linkedin";
 import { createWriteClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   GeneratedPostRow,
   GeneratedPostStatus,
@@ -147,7 +148,7 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
       };
     }
 
-    // 3. Get the LinkedIn access token (server-side only)
+    // Verify the authenticated user session
     const supabase = await createWriteClient();
     const {
       data: { user },
@@ -160,7 +161,12 @@ export async function publishPost(postId: string): Promise<PostPublishResult> {
       };
     }
 
-    const tokenData = await getAccessToken(supabase, user.id);
+    // 3. Get the LinkedIn access token (server-side only).
+    // The token column is readable only via the service-role client (the
+    // hardening migration revokes table-level SELECT of linkedin_connections
+    // from authenticated), so use the admin client — matching the scheduler
+    // publish path. Ownership is enforced by the post lookup in step 1.
+    const tokenData = await getAccessToken(createAdminClient(), user.id);
 
     if (!tokenData) {
       return {

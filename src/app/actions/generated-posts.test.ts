@@ -26,6 +26,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createWriteClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(),
+}));
+
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
 import {
