@@ -1,18 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/middleware";
-
-const protectedRoutes = [
-  "/dashboard",
-  "/curriculum",
-  "/journal",
-  "/course-materials",
-  "/posts",
-  "/schedule",
-  "/settings",
-];
-
-const authRoutes = ["/login", "/auth"];
+import { AUTH_ROUTES, PROTECTED_ROUTES } from "@/config/protected-routes";
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
@@ -25,14 +14,14 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Redirect unauthenticated users away from protected routes
-  if (!user && protectedRoutes.some((route) => pathname.startsWith(route))) {
+  if (!user && PROTECTED_ROUTES.some((route) => pathname.startsWith(route))) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   // Redirect authenticated users away from auth routes
-  if (user && authRoutes.some((route) => pathname.startsWith(route))) {
+  if (user && AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
