@@ -117,8 +117,10 @@ export function OpportunitiesClient({
 
       {!anyWorkStarted && !recommended && (
         <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          No opportunities yet. Import a journal or PDF in Settings &amp;
-          Prompts, then run &quot;Build Today&apos;s Options&quot; to score daily content ideas.
+          No opportunities yet. Content opportunities are built automatically
+          when you submit a learning journal — from the Journal or from a course
+          PDF in Course Materials. Return here after submitting to see your
+          recruiter-focused options.
         </div>
       )}
 

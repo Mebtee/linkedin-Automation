@@ -11,7 +11,9 @@ import {
   getPageText,
 } from "@/app/actions/course-materials";
 import { saveJournal, submitJournal } from "@/app/actions/journal";
+import type { OpportunityGenerationOutcome } from "@/app/actions/journal";
 import { generatePost } from "@/app/actions/post-generation";
+import { OpportunitySubmitNotice } from "@/components/opportunities/opportunity-submit-notice";
 import { TextareaField } from "@/components/journal/textarea-field";
 import { EvidencePanel } from "@/components/course-materials/evidence-panel";
 import { PagePreview } from "@/components/course-materials/page-preview";
@@ -143,6 +145,8 @@ export function CourseMaterialsClient() {
   const [submittedDay, setSubmittedDay] = useState(0);
   const [generatedPost, setGeneratedPost] = useState<GeneratedPostRow | null>(null);
   const [generatingPost, setGeneratingPost] = useState(false);
+  const [opportunityOutcome, setOpportunityOutcome] =
+    useState<OpportunityGenerationOutcome | null>(null);
 
   // ─── Delete confirmation ───
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -335,6 +339,7 @@ export function CourseMaterialsClient() {
     }
 
     setSubmittedDay(selectedDay);
+    setOpportunityOutcome(submitted.opportunities ?? null);
     setSubmitting(false);
     setViewMode("post-submitted");
   }, [buildSaveInput, confidence, selectedDay]);
@@ -439,6 +444,7 @@ export function CourseMaterialsClient() {
     setPages([]);
     setHighlightPage(null);
     setGeneratedPost(null);
+    setOpportunityOutcome(null);
     setPageCount(0);
     setFields(EMPTY_FIELDS);
     setConfidence(null);
@@ -722,6 +728,13 @@ export function CourseMaterialsClient() {
           <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
             {error}
           </div>
+        )}
+
+        {opportunityOutcome && (
+          <OpportunitySubmitNotice
+            outcome={opportunityOutcome}
+            dayNumber={submittedDay}
+          />
         )}
 
         <section className="rounded-xl border border-green-200 bg-green-50 p-6 dark:border-green-800 dark:bg-green-900/20">

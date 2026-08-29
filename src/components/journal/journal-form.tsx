@@ -10,6 +10,8 @@ import { ConfirmDialog } from "@/components/journal/confirm-dialog";
 import { DayNavigation } from "@/components/journal/day-navigation";
 import { CurriculumDisplay } from "@/components/journal/curriculum-display";
 import { saveJournal, submitJournal } from "@/app/actions/journal";
+import type { OpportunityGenerationOutcome } from "@/app/actions/journal";
+import { OpportunitySubmitNotice } from "@/components/opportunities/opportunity-submit-notice";
 import type { JournalEntry, JournalEntryStatus } from "@/types/journal";
 import type { CurriculumDayRow, ModuleRow } from "@/services/curriculum";
 
@@ -81,6 +83,8 @@ export function JournalForm({
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [opportunityOutcome, setOpportunityOutcome] =
+    useState<OpportunityGenerationOutcome | null>(null);
   const lastSavedHashRef = useRef<string>("");
 
   const isReadonly = status === "submitted" || status === "used";
@@ -214,11 +218,13 @@ export function JournalForm({
 
     setIsSubmitting(true);
     setToast(null);
+    setOpportunityOutcome(null);
 
     const result = await submitJournal({ entryId });
 
     if (result.success) {
       if (result.status) setStatus(result.status);
+      setOpportunityOutcome(result.opportunities ?? null);
       setToast({ type: "success", message: "Your journal was submitted." });
     } else {
       const msg = result.error ?? "Failed to submit.";
@@ -277,6 +283,14 @@ export function JournalForm({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Recruiter-focused opportunities built from this submission */}
+      {opportunityOutcome && (
+        <OpportunitySubmitNotice
+          outcome={opportunityOutcome}
+          dayNumber={dayNumber}
+        />
       )}
 
       {/* Header */}

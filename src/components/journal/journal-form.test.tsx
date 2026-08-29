@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 
 import { JournalForm } from "./journal-form";
 
+vi.mock("server-only", () => ({}));
+
 // Mock the server actions
 vi.mock("@/app/actions/journal", () => ({
   saveJournal: vi.fn(),

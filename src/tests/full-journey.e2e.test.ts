@@ -733,11 +733,29 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
     const submitted = await submitJournal({ entryId: saved.entryId! });
     expect(submitted.success).toBe(true);
 
-    // 2. Build scored content opportunities from the confirmed journal.
+    // Phase 5B fix: submission itself builds recruiter-focused opportunities,
+    // no separate "Build Today's Options" action required.
+    const oppOutcome = submitted.opportunities;
+    expect(oppOutcome?.status).toBe("created");
+    if (oppOutcome?.status === "created") {
+      expect(oppOutcome.count).toBeGreaterThan(0);
+    }
+    const dayRowsAfterSubmit = userDb.tables.content_opportunities!.filter(
+      (o) => o.day_number === dayNumber,
+    );
+    expect(dayRowsAfterSubmit.length).toBeGreaterThan(0);
+    // Journal submission and opportunity creation never touch LinkedIn.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // 2. Re-running generation is idempotent — no duplicate rows are created.
     const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
     expect(oppGen.success).toBe(true);
     if (!oppGen.success) throw new Error(oppGen.error);
     expect(oppGen.count).toBeGreaterThan(0);
+    expect(
+      userDb.tables.content_opportunities!.filter((o) => o.day_number === dayNumber)
+        .length,
+    ).toBe(dayRowsAfterSubmit.length);
 
     // 3. Mark the deterministic winner "selected" (Phase 5A score, not a 2nd engine).
     const best = await selectBestContentOpportunityAction();

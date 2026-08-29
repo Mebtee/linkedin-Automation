@@ -10,6 +10,11 @@ vi.mock("@/services/journal", () => ({
   deleteJournalEntry: vi.fn(),
 }));
 
+// Mock the opportunity generation action wired into submitJournal
+vi.mock("@/app/actions/content-opportunities", () => ({
+  generateContentOpportunitiesForDayAction: vi.fn(),
+}));
+
 import {
   saveJournal,
   submitJournal,
@@ -21,9 +26,15 @@ import {
   updateJournalEntry,
   submitJournalEntry,
 } from "@/services/journal";
+import { generateContentOpportunitiesForDayAction } from "@/app/actions/content-opportunities";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (generateContentOpportunitiesForDayAction as Mock).mockResolvedValue({
+    success: true,
+    count: 0,
+    opportunities: [],
+  });
 });
 
 describe("saveJournal server action", () => {
@@ -107,6 +118,106 @@ describe("submitJournal server action", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("at least one");
+  });
+
+  it("builds content opportunities after a successful submission", async () => {
+    (submitJournalEntry as Mock).mockResolvedValue({
+      id: "entry-id",
+      day_number: 12,
+      status: "submitted",
+    });
+    (generateContentOpportunitiesForDayAction as Mock).mockResolvedValue({
+      success: true,
+      count: 3,
+      opportunities: [{ id: "op-1" }, { id: "op-2" }, { id: "op-3" }],
+    });
+
+    const result = await submitJournal({ entryId: "entry-id" });
+
+    expect(result.success).toBe(true);
+    expect(result.status).toBe("submitted");
+    expect(result.opportunities).toEqual({ status: "created", count: 3 });
+    expect(generateContentOpportunitiesForDayAction).toHaveBeenCalledTimes(1);
+    expect(generateContentOpportunitiesForDayAction).toHaveBeenCalledWith({
+      dayNumber: 12,
+    });
+  });
+
+  it("does not build opportunities when submission fails", async () => {
+    (submitJournalEntry as Mock).mockRejectedValue(
+      new Error("Journal entry must contain at least one"),
+    );
+
+    const result = await submitJournal({ entryId: "empty-entry" });
+
+    expect(result.success).toBe(false);
+    expect(generateContentOpportunitiesForDayAction).not.toHaveBeenCalled();
+  });
+
+  it("still reports a successful journal when generation fails gracefully", async () => {
+    (submitJournalEntry as Mock).mockResolvedValue({
+      id: "entry-id",
+      day_number: 12,
+      status: "submitted",
+    });
+    (generateContentOpportunitiesForDayAction as Mock).mockResolvedValue({
+      success: false,
+      error: "opportunity build failed",
+    });
+
+    const result = await submitJournal({ entryId: "entry-id" });
+
+    expect(result.success).toBe(true);
+    expect(result.status).toBe("submitted");
+    expect(result.error).toBeUndefined();
+    expect(result.opportunities?.status).toBe("failed");
+  });
+
+  it("does not fail the journal when generation throws", async () => {
+    (submitJournalEntry as Mock).mockResolvedValue({
+      id: "entry-id",
+      day_number: 12,
+      status: "submitted",
+    });
+    (generateContentOpportunitiesForDayAction as Mock).mockRejectedValue(
+      new Error("network down"),
+    );
+
+    const result = await submitJournal({ entryId: "entry-id" });
+
+    expect(result.success).toBe(true);
+    expect(result.opportunities?.status).toBe("failed");
+  });
+
+  it("reports a skipped outcome when generation builds nothing", async () => {
+    (submitJournalEntry as Mock).mockResolvedValue({
+      id: "entry-id",
+      day_number: 12,
+      status: "submitted",
+    });
+    (generateContentOpportunitiesForDayAction as Mock).mockResolvedValue({
+      success: true,
+      count: 0,
+      opportunities: [],
+    });
+
+    const result = await submitJournal({ entryId: "entry-id" });
+
+    expect(result.success).toBe(true);
+    expect(result.opportunities?.status).toBe("skipped");
+  });
+
+  it("does not attempt generation without a day number", async () => {
+    (submitJournalEntry as Mock).mockResolvedValue({
+      id: "entry-id",
+      status: "submitted",
+    });
+
+    const result = await submitJournal({ entryId: "entry-id" });
+
+    expect(result.success).toBe(true);
+    expect(result.opportunities).toBeUndefined();
+    expect(generateContentOpportunitiesForDayAction).not.toHaveBeenCalled();
   });
 });
 

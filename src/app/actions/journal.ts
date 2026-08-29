@@ -8,12 +8,19 @@ import {
   deleteJournalEntry,
 } from "@/services/journal";
 import type { JournalEntryStatus } from "@/types/journal";
+import { generateContentOpportunitiesForDayAction } from "./content-opportunities";
+
+export type OpportunityGenerationOutcome =
+  | { status: "created"; count: number }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; reason: string };
 
 export type JournalActionResult = {
   success: boolean;
   error?: string;
   entryId?: string;
   status?: JournalEntryStatus;
+  opportunities?: OpportunityGenerationOutcome;
 };
 
 export type SaveJournalInput = {
@@ -83,15 +90,53 @@ export async function saveJournal(
 /**
  * Submits an existing journal entry.
  */
+/**
+ * Best-effort conversion of a just-submitted journal day into recruiter-focused
+ * content opportunities. Runs after the journal is confirmed as submitted so a
+ * failure here never blocks or rolls back a successful journal submission.
+ */
+async function buildOpportunitiesAfterSubmit(
+  dayNumber: number,
+): Promise<OpportunityGenerationOutcome> {
+  try {
+    const generation = await generateContentOpportunitiesForDayAction({ dayNumber });
+    if (generation.success) {
+      if (generation.count > 0) {
+        return { status: "created", count: generation.count };
+      }
+      return {
+        status: "skipped",
+        reason:
+          "No recruiter-focused content opportunities could be built from this entry yet.",
+      };
+    }
+    return {
+      status: "failed",
+      reason: "Your content opportunities could not be built. Try again.",
+    };
+  } catch {
+    return {
+      status: "failed",
+      reason: "Your content opportunities could not be built. Try again.",
+    };
+  }
+}
+
 export async function submitJournal(
   input: SubmitJournalInput,
 ): Promise<JournalActionResult> {
   try {
     const submitted = await submitJournalEntry(input.entryId);
+    const dayNumber = submitted.day_number;
+    const opportunities =
+      typeof dayNumber === "number" && Number.isInteger(dayNumber)
+        ? await buildOpportunitiesAfterSubmit(dayNumber)
+        : undefined;
     return {
       success: true,
       entryId: submitted.id,
       status: submitted.status,
+      ...(opportunities ? { opportunities } : {}),
     };
   } catch (err) {
     const message =

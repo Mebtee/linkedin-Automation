@@ -10,6 +10,11 @@ vi.mock("@/services/journal", () => ({
   deleteJournalEntry: vi.fn(),
 }));
 
+// Mock the opportunity generation action wired into submitJournal
+vi.mock("@/app/actions/content-opportunities", () => ({
+  generateContentOpportunitiesForDayAction: vi.fn(),
+}));
+
 import {
   saveJournal,
   submitJournal,
@@ -20,9 +25,15 @@ import {
   updateJournalEntry,
   submitJournalEntry,
 } from "@/services/journal";
+import { generateContentOpportunitiesForDayAction } from "@/app/actions/content-opportunities";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (generateContentOpportunitiesForDayAction as Mock).mockResolvedValue({
+    success: true,
+    count: 0,
+    opportunities: [],
+  });
 });
 
 describe("Phase 2D: Persistence Workflow", () => {
