@@ -1,10 +1,9 @@
-import type { VisualBrief, VisualComposition } from "@/types/image";
+import type { VisualBrief, VisualComposition, VisualKeyPoint } from "@/types/image";
 import { brand } from "@/config/brand";
-import { renderScaffold, closeScaffold } from "../../svg/render";
+import { renderScaffold } from "../../svg/render";
 import {
   drawNode,
   drawArrow,
-  drawDownArrow,
   drawCard,
   drawPill,
   drawDayBadge,
@@ -14,44 +13,46 @@ import {
 } from "./draw";
 import { clampKeyPoints } from "../themes";
 
-const W = brand.image.width;
-const Cx = W / 2;
+// ─── Wide-format canvas (`brand.image` = 1200×630, LinkedIn feed ratio) ─────
+// Every coordinate is derived from the canvas dims so the layout stays portable
+// if the brand canvas changes. The scaffold draws the series title at y≈80; the
+// header block (primary tag → headline → subheadline → accent rule) spans
+// ~98–228; the content band sits ~290–530; the footer badge at the bottom.
+// Everything critical stays inside a safe margin so nothing is clipped in feed
+// previews.
 
-export interface CompositionRenderContext {
-  readonly brief: VisualBrief;
-}
-
-// ─── Layout constants ───────────────────────────────────────────────────────
-// Mobile-safe: everything critical stays inside a ~90px safe margin on a square
-// 1200×1200 canvas. Series title at y=80; header block spans ~98–230.
+const Cx = brand.image.width / 2;
+const FOOTER_Y = 560;
 
 const TOP = 160;
 
-/** Pixel space occupied by one glyph at a given font size. */
+/** Pills row — limited to a single compact row that fits the wide canvas. */
 function fitPills(technologies: readonly string[], y: number): string {
-  const pills = technologies.slice(0, 5);
-  const total = pills.length * 170 + (pills.length - 1) * 12;
-  let x = Cx - total / 2 + 85;
+  const pills = technologies.slice(0, 4);
+  if (!pills.length) return "";
+  const total = pills.length * 160 + (pills.length - 1) * 16;
+  let x = Cx - total / 2 + 80;
   return pills.map((t) => {
     const out = drawPill(x, y, t);
-    x += 182;
+    x += 176;
     return out;
   }).join("");
 }
 
-function header(brief: VisualBrief, y: number, subY: number): string {
-  const parts = [
-    // Level 1 — the single dominant idea, framed small so it never competes
-    // with the headline but makes the "one message" explicit.
-    drawPrimaryTag(Cx, y - 40, brief.primaryConcept || ""),
-    drawHeadline(Cx, y, brief.headline || brief.concept),
+function header(brief: VisualBrief): string {
+  const subY = TOP + 44;
+  return [
+    drawPrimaryTag(Cx, TOP - 40, brief.primaryConcept || ""),
+    drawHeadline(Cx, TOP, brief.headline || brief.concept),
     drawSubheadline(Cx, subY, brief.subheadline),
-  ];
-  return parts.join("");
+    // Fine brand accent rule under the header block ties the image to the
+    // series accent without competing with the content.
+    `<line x1="${Cx - 120}" y1="${subY + 22}" x2="${Cx + 120}" y2="${subY + 22}" stroke="${brand.colors.blue}" stroke-width="3" stroke-linecap="round" opacity="0.55" />`,
+  ].join("");
 }
 
 function footerBadge(brief: VisualBrief): string {
-  return drawDayBadge(Cx, 1060, brief.dayNumber, brief.module);
+  return drawDayBadge(Cx, FOOTER_Y, brief.dayNumber, brief.module);
 }
 
 /** Word-wrap a long label into lines for a node. */
@@ -72,125 +73,127 @@ function nodeLines(label: string): string[] {
   return lines;
 }
 
-// ─── Composition: CONCEPT_FLOW ──────────────────────────────────────────────
-// Headline + horizontal chain of concept nodes connected by arrows.
-
-function renderConceptFlow(brief: VisualBrief): string {
-  const chain = brief.visualMetaphor.split(" → ").map((s) => s.trim()).filter(Boolean);
-  const nodes = chain.length >= 2 ? chain : brief.keyPoints.map((p) => p.label);
+/** Horizontal chain of nodes connected by left→right arrows. */
+function chainRow(nodes: readonly string[], y: number, boxH: number, gap: number): string {
   const shown = nodes.slice(0, 4);
-
   const n = shown.length;
-  const boxW = Math.min(170, (W - 360) / n);
-  const gap = 40;
+  if (!n) return "";
+  const boxW = Math.min(230, (W - 260) / n);
   const totalW = n * boxW + (n - 1) * gap;
   const startX = Cx - totalW / 2;
-  const y = 420;
-  const boxH = 110;
-
-  let nodesSvg = "";
+  let svg = "";
   shown.forEach((label, i) => {
     const lines = nodeLines(label);
     const x = startX + i * (boxW + gap);
-    nodesSvg += drawNode(x, y, boxW, boxH, lines[0] || "", {
+    svg += drawNode(x, y, boxW, boxH, lines[0] || "", {
       accent: i === n - 1,
       sub: lines[1],
     });
     if (i < n - 1) {
-      nodesSvg += drawArrow(x + boxW + 2, y + boxH / 2, x + boxW + gap - 2, y + boxH / 2);
+      svg += drawArrow(x + boxW + 2, y + boxH / 2, x + boxW + gap - 2, y + boxH / 2);
     }
   });
+  return svg;
+}
 
-  const pills = brief.technologies.length ? fitPills(brief.technologies, 640) : "";
+/** Horizontal row of cards (used for descriptive key points). */
+function cardRow(points: readonly VisualKeyPoint[], y: number, w: number, h: number, gap: number): string {
+  const shown = points.slice(0, 4);
+  const n = shown.length;
+  if (!n) return "";
+  const totalW = n * w + (n - 1) * gap;
+  const startX = Cx - totalW / 2;
+  return shown.map((p, i) => drawCard(startX + i * (w + gap), y, w, h, p.label || " ", p.detail, i)).join("");
+}
+
+const W = brand.image.width;
+
+// ─── Composition: CONCEPT_FLOW ──────────────────────────────────────────────
+// Headline + horizontal chain of concept nodes connected by arrows, then pills.
+
+function renderConceptFlow(brief: VisualBrief): string {
+  const chain = brief.visualMetaphor.split(" → ").map((s) => s.trim()).filter(Boolean);
+  const nodes = chain.length >= 2 ? chain : brief.keyPoints.map((p) => p.label);
 
   return [
-    header(brief, TOP, TOP + 44),
-    nodesSvg,
-    pills,
+    header(brief),
+    chainRow(nodes, 310, 120, 44),
+    fitPills(brief.technologies, 475),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: PROBLEM_SOLUTION ──────────────────────────────────────────
-// Two-stage horizontal problem → solution flow with supporting points.
+// Three aligned columns — PROBLEM → SOLUTION → RESULT — each with a descriptive
+// supporting card beneath, laid out to use the wide canvas.
 
 function renderProblemSolution(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
   const boxW = 300;
-  const boxH = 120;
-  const y = 380;
-  const leftX = 160;
-  const rightX = W - 160 - boxW;
-  const midX = Cx;
+  const boxH = 110;
+  const y = 300;
+  const leftX = 90;
+  const rightX = W - 90 - boxW;
+  const midX = Cx - boxW / 2;
+  const gap = midX - (leftX + boxW);
 
-  const pills = brief.technologies.length ? fitPills(brief.technologies, 700) : "";
+  const columns: Array<[number, string, string]> = [
+    [leftX, "PROBLEM", points[0]?.label || brief.concept],
+    [midX, "SOLUTION", points[1]?.label || ""],
+    [rightX, "RESULT", points[2]?.label || ""],
+  ];
 
-  const cards = points.map((p, i) =>
-    drawCard(340, 520 + i * 130, 520, 110, p.label, p.detail, i),
-  ).join("");
+  const boxes = columns.map(([x, cap, sub]) => drawNode(x, y, boxW, boxH, cap, { accent: cap === "SOLUTION", sub })).join("");
+  const arrows =
+    drawArrow(leftX + boxW + 6, y + boxH / 2, leftX + boxW + gap - 6, y + boxH / 2) +
+    drawArrow(midX + boxW + 6, y + boxH / 2, midX + boxW + gap - 6, y + boxH / 2);
+
+  const cards = cardRow(points, 440, boxW, 90, gap);
 
   return [
-    header(brief, TOP, TOP + 44),
-    drawNode(leftX, y, boxW, boxH, "PROBLEM", { sub: points[0]?.label || brief.concept }),
-    drawArrow(leftX + boxW + 10, y + boxH / 2, midX - 14, y + boxH / 2),
-    drawNode(midX, y, boxW, boxH, "SOLUTION", { accent: true, sub: points[1]?.label || "" }),
-    drawArrow(midX + boxW + 10, y + boxH / 2, rightX - 14, y + boxH / 2),
-    drawNode(rightX, y, boxW, boxH, "RESULT", { sub: points[2]?.label || "" }),
+    header(brief),
+    boxes,
+    arrows,
     cards,
-    pills,
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: THREE_IDEAS ───────────────────────────────────────────────
-// Headline + three key idea cards (concept / explanation layout).
+// Headline + three descriptive idea cards across the width + pills.
 
 function renderThreeIdeas(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
-  while (points.length < 3) points.push({ label: "", detail: "" });
+  const w = 360;
+  const gap = 18;
+  const y = 290;
+  const h = 180;
 
   const cards = points.map((p, i) =>
-    drawCard(210, 360 + i * 190, 780, 170, p.label || " ", p.detail, i),
+    drawCard(Cx - (3 * w + 2 * gap) / 2 + i * (w + gap), y, w, h, p.label || " ", p.detail, i),
   ).join("");
 
-  const pills = brief.technologies.length ? fitPills(brief.technologies, 990) : "";
-
   return [
-    header(brief, TOP, TOP + 44),
+    header(brief),
     cards,
-    pills,
+    fitPills(brief.technologies, 505),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: ARCHITECTURE_FLOW ─────────────────────────────────────────
-// Layered architecture / system components descending into one output.
+// Layered system tiers shown as a horizontal pipeline plus a supporting row.
 
 function renderArchitectureFlow(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 4);
-  const tiers = points.length ? points : [{ label: brief.concept || "System", detail: "" }, { label: "", detail: "" }, { label: "", detail: "" }];
+  const nodes = points.length ? points.map((p) => p.label) : [brief.concept || "System", "", "", ""];
 
-  const boxW = 360;
-  const boxH = 92;
-  const gap = 60;
-  const startY = 280;
-
-  let svg = header(brief, TOP, TOP + 44);
-  tiers.slice(0, 4).forEach((p, i) => {
-    const y = startY + i * (boxH + gap);
-    const accent = i === tiers.length - 1 || i === 3;
-    const shrink = i > 0;
-    const w = shrink ? boxW - i * 24 : boxW;
-    svg += drawNode(Cx - w / 2, y, w, boxH, p.label || "…", { accent, sub: p.detail });
-    if (i < Math.min(tiers.length, 4) - 1) {
-      svg += drawDownArrow(Cx, y + boxH + 4, y + boxH + gap - 4);
-    } else if (i < 3) {
-      svg += drawDownArrow(Cx, y + boxH + 4, y + boxH + gap - 4);
-    }
-  });
-
-  svg += footerBadge(brief);
-  return svg;
+  return [
+    header(brief),
+    chainRow(nodes, 310, 120, 44),
+    fitPills(brief.technologies, 475),
+    footerBadge(brief),
+  ].join("");
 }
 
 // ─── Composition: BEFORE_AFTER ───────────────────────────────────────────────
@@ -203,8 +206,8 @@ function renderBeforeAfter(brief: VisualBrief): string {
     : ["BEFORE", "AFTER"];
   const points = clampKeyPoints(brief.keyPoints, 2);
   const boxW = 380;
-  const boxH = 260;
-  const y = 380;
+  const boxH = 200;
+  const y = 300;
   const leftX = 120;
   const rightX = W - 120 - boxW;
 
@@ -212,7 +215,7 @@ function renderBeforeAfter(brief: VisualBrief): string {
   const rightDetail = points[1]?.detail || brief.visualMetaphor;
 
   return [
-    header(brief, TOP, TOP + 44),
+    header(brief),
     drawNode(leftX, y, boxW, boxH, contrast[0], { sub: leftDetail }),
     drawArrow(leftX + boxW + 14, y + boxH / 2, rightX - 14, y + boxH / 2),
     drawNode(rightX, y, boxW, boxH, contrast[1], { accent: true, sub: rightDetail }),
@@ -221,27 +224,19 @@ function renderBeforeAfter(brief: VisualBrief): string {
 }
 
 // ─── Composition: SKILL_PROGRESSION ─────────────────────────────────────────
-// Vertical skill progression steps.
+// Horizontal progression steps across the wide canvas, with a supporting card
+// row beneath them.
 
 function renderSkillProgression(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 4);
-  const steps = points.length ? points : [{ label: brief.concept || "Learn", detail: "" }, { label: "", detail: "" }, { label: "", detail: "" }];
-  const tierH = 110;
-  const gap = 28;
-  const startY = 260;
+  const nodes = points.length ? points.map((p) => p.label) : [brief.concept || "Learn", "", "", ""];
 
-  let svg = header(brief, TOP, TOP + 44);
-  steps.slice(0, 4).forEach((s, i) => {
-    const y = startY + i * (tierH + gap);
-    const left = 250;
-    const w = 700;
-    svg += drawCard(left, y, w, tierH, s.label || " ", s.detail, i);
-    if (i < Math.min(steps.length, 4) - 1) {
-      svg += drawDownArrow(Cx, y + tierH + 2, y + tierH + gap - 2);
-    }
-  });
-  svg += footerBadge(brief);
-  return svg;
+  return [
+    header(brief),
+    chainRow(nodes, 300, 110, 44),
+    cardRow(points, 445, 220, 78, 20),
+    footerBadge(brief),
+  ].join("");
 }
 
 // ─── Composition: COMPARISON ─────────────────────────────────────────────────
@@ -253,49 +248,46 @@ function renderComparison(brief: VisualBrief): string {
   const right = (parts.length > 1 ? parts[1] : undefined) || "B";
   const points = clampKeyPoints(brief.keyPoints, 2);
   const boxW = 460;
-  const boxH = 300;
-  const y = 380;
-  const leftX = 110;
-  const rightX = W - 110 - boxW;
+  const boxH = 190;
+  const y = 300;
+  const leftX = 90;
+  const rightX = W - 90 - boxW;
+  const midY = y + boxH / 2;
 
   return [
-    header(brief, TOP, TOP + 44),
+    header(brief),
     drawNode(leftX, y, boxW, boxH, left, { sub: points[0]?.detail || "" }),
+    drawArrow(leftX + boxW + 10, midY, rightX - 10, midY),
     drawNode(rightX, y, boxW, boxH, right, { accent: true, sub: points[1]?.detail || brief.concept }),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: INPUT_PROCESS_OUTPUT ──────────────────────────────────────
-// Three horizontal stages: INPUT → PROCESS → OUTPUT. Great for concept/how-it-
-// works, functions and pipelines.
+// Three horizontal stages: INPUT → PROCESS → OUTPUT with supporting cards.
 
 function renderInputProcessOutput(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
   const captions = ["INPUT", "PROCESS", "OUTPUT"];
-  const boxW = 240;
-  const boxH = 120;
-  const gap = 90;
+  const boxW = 280;
+  const boxH = 110;
+  const gap = 66;
   const totalW = 3 * boxW + 2 * gap;
   const startX = Cx - totalW / 2;
-  const y = 430;
-
+  const y = 300;
   const stageAccents = [false, true, false];
 
-  let svg = header(brief, TOP, TOP + 44);
+  let svg = header(brief);
   captions.forEach((caption, i) => {
     const x = startX + i * (boxW + gap);
-    // Stage caption above the box so the process structure stays obvious even
-    // when the node carries real post content.
-    svg += `<text x="${x + boxW / 2}" y="${y - 30}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="${brand.colors.cyan}">${caption}</text>`;
+    svg += `<text x="${x + boxW / 2}" y="${y - 26}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="${brand.colors.cyan}">${caption}</text>`;
     svg += drawNode(x, y, boxW, boxH, points[i]?.label || caption, { accent: stageAccents[i], sub: points[i]?.detail });
     if (i < 2) {
       svg += drawArrow(x + boxW + 6, y + boxH / 2, x + boxW + gap - 6, y + boxH / 2);
     }
   });
 
-  const pills = brief.technologies.length ? fitPills(brief.technologies, 620) : "";
-  svg += pills;
+  svg += cardRow(points, 445, boxW, 66, gap);
   svg += footerBadge(brief);
   return svg;
 }
@@ -315,10 +307,13 @@ const RENDERERS: Record<VisualComposition, (b: VisualBrief) => string> = {
 
 /**
  * Renders a full branded SVG for a VisualBrief using its chosen composition.
- * Reuses the existing brand scaffold; purely programmatic — no external assets.
+ * Canvas is the wide-format `brand.image` (1200×630); purely programmatic,
+ * deterministic, and limited to the brand palette.
  */
 export function renderVisualBrief(brief: VisualBrief): string {
   const renderer = RENDERERS[brief.composition] ?? renderConceptFlow;
   const content = renderer(brief);
-  return renderScaffold() + content + closeScaffold();
+  // Compositions carry their own bottom day/module badge, so the shared
+  // scaffold footer mark is omitted here to avoid a redundant mark stacking.
+  return renderScaffold() + content + "</svg>";
 }

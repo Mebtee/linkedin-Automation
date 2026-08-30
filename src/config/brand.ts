@@ -15,7 +15,7 @@ export type BrandConfig = {
   totalModules: number;
   timezone: string;
   colors: BrandColors;
-  /** Branded image dimensions (generation is a later phase). */
+  /** Branded image dimensions (LinkedIn standard wide feed ratio). */
   image: {
     width: number;
     height: number;
@@ -41,7 +41,7 @@ export const brand = {
   },
   image: {
     width: 1200,
-    height: 1200,
+    height: 630,
   },
   mark: null,
 } as const satisfies BrandConfig;

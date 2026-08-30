@@ -56,11 +56,6 @@ export function drawArrow(x1: number, y1: number, x2: number, y2: number): strin
     <polygon points="${x2},${y2} ${x2 - hx - hy * 0.35},${y2 - hy + hx * 0.35} ${x2 - hx + hy * 0.35},${y2 - hy - hx * 0.35}" fill="${c.cyan}" opacity="0.8" />`;
 }
 
-/** A down arrow for stacked layouts. */
-export function drawDownArrow(x: number, y1: number, y2: number): string {
-  return drawArrow(x, y1, x, y2);
-}
-
 /** A key-point card with label + detail lines. */
 export function drawCard(x: number, y: number, w: number, h: number, label: string, detail: string, index: number): string {
   return `
@@ -116,7 +111,7 @@ function wrapCentered(text: string, maxWidth: number, fontSize: number, maxLines
 /** Medium uppercase section label (e.g. the concept headline). */
 export function drawHeadline(x: number, y: number, text: string): string {
   if (!text) return "";
-  // Keep content well inside the 90px safe margin (1200 − 180 = 1020px usable).
+  // Keep content well inside the safe margin on the wide 1200×630 canvas.
   const lines = wrapCentered(truncate(text, 60), 1020, 42, 2);
   const lineH = 46;
   const start = y - ((lines.length - 1) * lineH) / 2;
