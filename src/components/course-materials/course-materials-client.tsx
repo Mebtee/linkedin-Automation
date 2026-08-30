@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import {
   uploadCourseMaterial,
@@ -12,7 +11,6 @@ import {
 } from "@/app/actions/course-materials";
 import { saveJournal, submitJournal } from "@/app/actions/journal";
 import type { OpportunityGenerationOutcome } from "@/app/actions/journal";
-import { generatePost } from "@/app/actions/post-generation";
 import { OpportunitySubmitNotice } from "@/components/opportunities/opportunity-submit-notice";
 import { TextareaField } from "@/components/journal/textarea-field";
 import { EvidencePanel } from "@/components/course-materials/evidence-panel";
@@ -23,12 +21,12 @@ import type {
   CourseMaterialRow,
   ProcessingStage,
 } from "@/types/course-material";
-import type { GeneratedPostRow } from "@/types/generated-post";
 
 // ─── Course Materials Dashboard (Phase 3J) ─────────────────────────────────
 // Upload PDF → server-side extraction/matching/proposal → user review →
 // save draft / submit through the EXISTING journal actions.
-// After submission, show post-generation confirmation.
+// After submission, opportunities are generated and the user continues in the
+// Opportunities workspace.
 
 type ViewMode = "dashboard" | "uploading" | "processing" | "reviewing" | "post-submitted";
 
@@ -110,7 +108,6 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
 };
 
 export function CourseMaterialsClient() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<HTMLDivElement>(null);
 
@@ -143,8 +140,6 @@ export function CourseMaterialsClient() {
 
   // ─── Post-submission ───
   const [submittedDay, setSubmittedDay] = useState(0);
-  const [generatedPost, setGeneratedPost] = useState<GeneratedPostRow | null>(null);
-  const [generatingPost, setGeneratingPost] = useState(false);
   const [opportunityOutcome, setOpportunityOutcome] =
     useState<OpportunityGenerationOutcome | null>(null);
 
@@ -344,27 +339,7 @@ export function CourseMaterialsClient() {
     setViewMode("post-submitted");
   }, [buildSaveInput, confidence, selectedDay]);
 
-  // ─── Generate Post (after submission) ───
-  const handleGeneratePost = useCallback(async () => {
-    setGeneratingPost(true);
-    setError(null);
-
-    const result = await generatePost({ dayNumber: submittedDay });
-    setGeneratingPost(false);
-
-    if (result.success) {
-      setGeneratedPost(result.post);
-    } else {
-      setError(result.error.message);
-    }
-  }, [submittedDay]);
-
   // ─── Navigate to post editor ───
-  const handleViewPost = useCallback(() => {
-    if (generatedPost) {
-      router.push(`/posts/${generatedPost.id}`);
-    }
-  }, [generatedPost, router]);
 
   // ─── Delete material ───
   const handleDelete = useCallback(
@@ -443,7 +418,6 @@ export function CourseMaterialsClient() {
     setFileSizeKb(0);
     setPages([]);
     setHighlightPage(null);
-    setGeneratedPost(null);
     setOpportunityOutcome(null);
     setPageCount(0);
     setFields(EMPTY_FIELDS);
@@ -750,7 +724,9 @@ export function CourseMaterialsClient() {
               Next Step
             </h3>
             <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-              Generate your LinkedIn post from this journal.
+              Your content opportunities are ready. Head to the Opportunities
+              workspace to review your recruiter-focused options, generate a
+              post, and publish it to LinkedIn.
             </p>
 
             <dl className="mt-3 space-y-1 text-xs">
@@ -767,24 +743,12 @@ export function CourseMaterialsClient() {
             </dl>
 
             <div className="mt-4 flex gap-2">
-              {generatedPost ? (
-                <button
-                  type="button"
-                  onClick={handleViewPost}
-                  className="rounded-lg bg-[#2563EB] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
-                >
-                  View Post
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleGeneratePost}
-                  disabled={generatingPost}
-                  className="rounded-lg bg-[#0F172A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1e293b] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-[#0F172A] dark:hover:bg-zinc-200"
-                >
-                  {generatingPost ? "Generating…" : "Generate Post"}
-                </button>
-              )}
+              <a
+                href="/opportunities"
+                className="rounded-lg bg-[#2563EB] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
+              >
+                Go to Opportunities
+              </a>
               <button
                 type="button"
                 onClick={handleBackToDashboard}

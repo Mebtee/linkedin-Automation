@@ -25,7 +25,7 @@ export async function login(formData: FormData) {
   // ensured here as well (idempotent).
   await ensureProfile();
 
-  redirect("/dashboard");
+  redirect("/opportunities");
 }
 
 export async function signup(formData: FormData) {
@@ -53,11 +53,11 @@ export async function signup(formData: FormData) {
   }
 
   // When email confirmation is disabled ("Confirm email" OFF), signUp returns
-  // a session immediately — go straight to the dashboard. Otherwise tell the
+  // a session immediately — go straight to the workspace. Otherwise tell the
   // user to check their inbox for the confirmation link.
   if (data.session) {
     await ensureProfile();
-    redirect("/dashboard");
+    redirect("/opportunities");
   }
 
   redirect("/login?message=check_email");

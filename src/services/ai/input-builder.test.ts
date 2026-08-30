@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPostGenerationInput, selectDefaultFormat } from "./input-builder";
+import { buildPostGenerationInput } from "./input-builder";
 import type { JournalEntry } from "@/types/journal";
 import type { CurriculumDayForInput, ModuleForInput } from "./input-builder";
 
@@ -40,68 +40,6 @@ const journal: JournalEntry = {
   created_at: "2026-08-17T10:00:00Z",
   updated_at: "2026-08-17T10:00:00Z",
 };
-
-// ─── selectDefaultFormat ────────────────────────────────────────────────────
-
-describe("selectDefaultFormat", () => {
-  it("returns what-i-learned for day 1", () => {
-    expect(selectDefaultFormat(1)).toBe("what-i-learned");
-  });
-
-  it("returns challenge for day 2", () => {
-    expect(selectDefaultFormat(2)).toBe("challenge");
-  });
-
-  it("returns small-win for day 3", () => {
-    expect(selectDefaultFormat(3)).toBe("small-win");
-  });
-
-  it("returns project for day 4", () => {
-    expect(selectDefaultFormat(4)).toBe("project");
-  });
-
-  it("returns concept for day 5", () => {
-    expect(selectDefaultFormat(5)).toBe("concept");
-  });
-
-  it("returns reflection for day 6", () => {
-    expect(selectDefaultFormat(6)).toBe("reflection");
-  });
-
-  it("returns practical-lesson for day 7", () => {
-    expect(selectDefaultFormat(7)).toBe("practical-lesson");
-  });
-
-  it("wraps around to what-i-learned for day 8", () => {
-    expect(selectDefaultFormat(8)).toBe("what-i-learned");
-  });
-
-  it("wraps around correctly for day 15", () => {
-    // (15 - 1) % 7 = 0 → what-i-learned
-    expect(selectDefaultFormat(15)).toBe("what-i-learned");
-  });
-
-  it("returns correct format for day 105", () => {
-    // (105 - 1) % 7 = 104 % 7 = 6 → practical-lesson
-    expect(selectDefaultFormat(105)).toBe("practical-lesson");
-  });
-
-  it("is deterministic — same day always returns same format", () => {
-    for (let day = 1; day <= 21; day++) {
-      const format1 = selectDefaultFormat(day);
-      const format2 = selectDefaultFormat(day);
-      expect(format1).toBe(format2);
-    }
-  });
-
-  it("cycles through all 7 formats", () => {
-    const formats = new Set<string>();
-    for (let day = 1; day <= 7; day++) {
-      formats.add(selectDefaultFormat(day));
-    }
-    expect(formats.size).toBe(7);
-  });
-});
 
 // ─── buildPostGenerationInput ────────────────────────────────────────────────
 

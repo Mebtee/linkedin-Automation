@@ -14,7 +14,6 @@ vi.mock("@/services/generated-posts", () => ({
 }));
 
 vi.mock("@/services/ai/generation", () => ({
-  generatePostForDay: vi.fn(),
   loadCurriculumDayForRecruiter: vi.fn(),
   loadJournalEntryForRecruiter: vi.fn(),
   loadModuleForRecruiter: vi.fn(),
@@ -44,7 +43,6 @@ import {
   updatePost,
   approvePost,
   deletePost,
-  regeneratePost,
   publishPost,
 } from "./generated-posts";
 import {
@@ -56,7 +54,6 @@ import {
   updatePublishState,
   annotateGeneratedPostQuality,
 } from "@/services/generated-posts";
-import { generatePostForDay } from "@/services/ai/generation";
 import { getAccessToken, publishToLinkedIn } from "@/services/linkedin";
 import { createWriteClient } from "@/lib/supabase/server";
 
@@ -342,48 +339,6 @@ describe("Post Server Actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe("Cannot delete");
-    });
-  });
-
-  // ─── regeneratePost ─────────────────────────────────────────────────────
-
-  describe("regeneratePost", () => {
-    it("returns success with new post", async () => {
-      const newPost = { ...mockPost, id: "post-2" };
-      (generatePostForDay as Mock).mockResolvedValue(newPost);
-
-      const result = await regeneratePost(1, "challenge");
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.post.id).toBe("post-2");
-      }
-      expect(generatePostForDay).toHaveBeenCalledWith(1, "challenge");
-    });
-
-    it("returns error on generation failure", async () => {
-      (generatePostForDay as Mock).mockRejectedValue(new Error("Generation failed"));
-
-      const result = await regeneratePost(1);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.code).toBe("GENERATION_FAILED");
-        expect(result.error.message).toBe("Generation failed");
-      }
-    });
-
-    it("handles duplicate error", async () => {
-      (generatePostForDay as Mock).mockRejectedValue(
-        Object.assign(new Error("Duplicate content"), { code: "GENERATION_DUPLICATE" }),
-      );
-
-      const result = await regeneratePost(1);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.code).toBe("GENERATION_DUPLICATE");
-      }
     });
   });
 

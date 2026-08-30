@@ -384,7 +384,7 @@ import { createClient, createWriteClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ingestCourseMaterial } from "@/services/course-materials";
 import { saveJournal, submitJournal } from "@/app/actions/journal";
-import { regeneratePost, approvePost, publishPost, updatePost } from "@/app/actions/generated-posts";
+import { approvePost, publishPost, updatePost } from "@/app/actions/generated-posts";
 import {
   generateContentOpportunitiesForDayAction,
   selectBestContentOpportunityAction,
@@ -473,7 +473,7 @@ async function ingestToApprovedPost(pdfText: string[], fileName = "journey.pdf")
   expect(ingest.proposal.evidence.length).toBeGreaterThan(0);
 
   const dayNumber = ingest.proposal.curriculumDay;
-  const saveInput = proposalToSaveInput(ingest.proposal, dayNumber);
+  const saveInput = recruiterSaveInput(ingest.proposal, dayNumber);
   const saved = await saveJournal(saveInput);
   expect(saved.success).toBe(true);
   expect(saved.entryId).toBeTruthy();
@@ -481,13 +481,26 @@ async function ingestToApprovedPost(pdfText: string[], fileName = "journey.pdf")
   expect(submitted.success).toBe(true);
   expect(submitted.status).toBe("submitted");
 
-  const genResult = await regeneratePost(dayNumber);
-  expect(genResult.success).toBe(true);
-  if (!genResult.success) throw new Error(genResult.error.message);
-  const post = genResult.post;
+  // Submission builds recruiter-focused opportunities; generate the post from
+  // the deterministic best one (the only daily generation path).
+  const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
+  expect(oppGen.success).toBe(true);
+  if (!oppGen.success) throw new Error(oppGen.error);
+  const opportunity =
+    oppGen.opportunities.find((o) => o.status === "selected") ??
+    oppGen.opportunities[0] ??
+    null;
+  expect(opportunity).toBeTruthy();
+  if (!opportunity) throw new Error("No content opportunities were created.");
+
+  const draft = await generatePostFromOpportunityAction(opportunity.id);
+  expect(draft.success).toBe(true);
+  if (!draft.success) throw new Error(draft.error);
+  const post = draft.post;
   expect(post.status).toBe("draft");
   expect(post.provider).toBe("fallback");
   expect(post.model).toBe("template-v1");
+  expect(post.opportunity_id).toBe(opportunity.id);
 
   const approved = await approvePost(post.id);
   expect(approved.success).toBe(true);
@@ -505,6 +518,35 @@ async function ingestToApprovedPost(pdfText: string[], fileName = "journey.pdf")
     saved,
     asset,
   };
+}
+
+/**
+ * Ingests a PDF, submits the journal, and generates a DRAFT post from the
+ * deterministic best content opportunity (never approved). Mirrors a user
+ * submitting their day sheet and landing on the Opportunities workspace.
+ */
+async function draftPostFromPdf(
+  pdfText: string[],
+  fileName: string,
+  journalBuilder: (proposal: { journal: Record<string, unknown> }, dayNumber: number) => ReturnType<typeof proposalToSaveInput> = proposalToSaveInput,
+) {
+  const pdfBytes = buildTestPdf(pdfText);
+  const ingest = await ingestCourseMaterial(fileName, pdfBytes);
+  const dayNumber = ingest.proposal.curriculumDay;
+  const saveInput = journalBuilder(ingest.proposal, dayNumber);
+  const saved = await saveJournal(saveInput);
+  await submitJournal({ entryId: saved.entryId! });
+
+  const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
+  if (!oppGen.success) throw new Error(oppGen.error);
+  const opportunity =
+    oppGen.opportunities.find((o) => o.status === "selected") ??
+    oppGen.opportunities[0] ??
+    null;
+  if (!opportunity) throw new Error("No content opportunities were created.");
+  const draft = await generatePostFromOpportunityAction(opportunity.id);
+  if (!draft.success) throw new Error(draft.error);
+  return draft.post;
 }
 
 /**
@@ -614,21 +656,19 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
     // LinkedIn connection lacks w_member_social by default; reauth with scope.
     userDb.tables.linkedin_connections![0]!.scope = "openid profile email w_member_social";
 
-    const pdfBytes = buildTestPdf(["Day 1 HTML Basics — this chapter covers semantic HTML tags."]);
-    const ingest = await ingestCourseMaterial("manual.pdf", pdfBytes);
-    const saveInput = proposalToSaveInput(ingest.proposal, ingest.proposal.curriculumDay);
-    const saved = await saveJournal(saveInput);
-    await submitJournal({ entryId: saved.entryId! });
-    const genResult = await regeneratePost(ingest.proposal.curriculumDay);
-    if (!genResult.success) throw new Error(genResult.error.message);
-    await approvePost(genResult.post.id);
+    const post = await draftPostFromPdf(
+      ["Day 1 HTML Basics — this chapter covers semantic HTML tags."],
+      "manual.pdf",
+      (proposal, dayNumber) => recruiterSaveInput(proposal, dayNumber),
+    );
+    await approvePost(post.id);
 
-    const pubResult = await publishPost(genResult.post.id);
+    const pubResult = await publishPost(post.id);
     expect(pubResult.success).toBe(true);
     if (!pubResult.success) throw new Error(pubResult.error.message);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const finalPost = userDb.tables.generated_posts!.find((r) => r.id === genResult.post.id)!;
+    const finalPost = userDb.tables.generated_posts!.find((r) => r.id === post.id)!;
     expect(finalPost.status).toBe("published");
     expect(finalPost.linkedin_post_id).toBe("urn:li:share:JOURNEY1");
   });
@@ -704,16 +744,14 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
   it("requires publishing scope (w_member_social) before manual publish", async () => {
     // Strip publish scope so the publish path must reject with INSUFFICIENT_SCOPE.
     userDb.tables.linkedin_connections![0]!.scope = "openid profile email";
-    const pdfBytes = buildTestPdf(["Day 1 HTML Basics — covers semantic HTML tags."]);
-    const ingest = await ingestCourseMaterial("scope.pdf", pdfBytes);
-    const saveInput = proposalToSaveInput(ingest.proposal, ingest.proposal.curriculumDay);
-    const saved = await saveJournal(saveInput);
-    await submitJournal({ entryId: saved.entryId! });
-    const genResult = await regeneratePost(ingest.proposal.curriculumDay);
-    if (!genResult.success) throw new Error(genResult.error.message);
-    await approvePost(genResult.post.id);
+    const post = await draftPostFromPdf(
+      ["Day 1 HTML Basics — covers semantic HTML tags."],
+      "scope.pdf",
+      (proposal, dayNumber) => recruiterSaveInput(proposal, dayNumber),
+    );
+    await approvePost(post.id);
 
-    const pubResult = await publishPost(genResult.post.id);
+    const pubResult = await publishPost(post.id);
     expect(pubResult.success).toBe(false);
     if (!pubResult.success) {
       expect(pubResult.error.code).toBe("INSUFFICIENT_SCOPE");
@@ -879,17 +917,14 @@ describe("Phase 4 full user journey (PDF → LinkedIn publishing)", () => {
   });
 
   it("cannot schedule an unapproved post", async () => {
-    const pdfBytes = buildTestPdf(["Day 1 HTML Basics — covers semantic HTML."]);
-    const ingest = await ingestCourseMaterial("draft.pdf", pdfBytes);
-    const saveInput = proposalToSaveInput(ingest.proposal, ingest.proposal.curriculumDay);
-    const saved = await saveJournal(saveInput);
-    await submitJournal({ entryId: saved.entryId! });
-    const genResult = await regeneratePost(ingest.proposal.curriculumDay);
-    if (!genResult.success) throw new Error(genResult.error.message);
+    const post = await draftPostFromPdf(
+      ["Day 1 HTML Basics — covers semantic HTML."],
+      "draft.pdf",
+    );
     // Not approved — schedule must be rejected.
     await expect(
       schedulePost({
-        post_id: genResult.post.id,
+        post_id: post.id,
         scheduled_at: new Date(Date.now() + 60_000).toISOString(),
       }),
     ).rejects.toMatchObject({ code: "INVALID_STATUS" });

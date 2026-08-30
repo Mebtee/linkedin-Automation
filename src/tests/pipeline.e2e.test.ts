@@ -54,7 +54,7 @@ const PROFILE_SCOPED_TABLES = new Set([
   "linkedin_connections",
 ]);
 
-type Filter = { col: string; op: "eq" | "lte"; val: unknown };
+type Filter = { col: string; op: "eq" | "lte" | "in"; val: unknown };
 
 class FakeQuery {
   private filters: Filter[] = [];
@@ -85,6 +85,11 @@ class FakeQuery {
 
   eq(col: string, val: unknown): this {
     this.filters.push({ col, op: "eq", val });
+    return this;
+  }
+
+  in(col: string, vals: unknown[]): this {
+    this.filters.push({ col, op: "in", val: vals });
     return this;
   }
 
@@ -169,6 +174,7 @@ class FakeQuery {
     let out = rows.filter((row) =>
       this.filters.every(({ col, op, val }) => {
         if (op === "eq") return row[col] === val;
+        if (op === "in") return Array.isArray(val) && val.includes(row[col]);
         if (op === "lte") {
           const rv = row[col];
           if (typeof rv === "string" && typeof val === "string") return rv <= val;
@@ -244,6 +250,9 @@ class FakeQuery {
             updated_at: new Date().toISOString(),
           });
         }
+      }
+      if (this.wantRowsAfterMutation) {
+        return { data: rows, count: rows.length, error: null };
       }
       return { data: null, count: null, error: null };
     }
@@ -375,10 +384,14 @@ import {
   updateJournalEntry,
   submitJournalEntry,
 } from "@/services/journal";
-import { regeneratePost, approvePost } from "@/app/actions/generated-posts";
+import { approvePost } from "@/app/actions/generated-posts";
 import { generatePostImage } from "@/services/image/service";
 import { schedulePost } from "@/services/scheduling";
 import { POST as schedulerPOST } from "@/app/api/scheduler/publish/route";
+import {
+  generateContentOpportunitiesForDayAction,
+  generatePostFromOpportunityAction,
+} from "@/app/actions/content-opportunities";
 
 beforeEach(() => {
   vi.resetModules();
@@ -425,6 +438,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * After a journal is submitted, generates the draft LinkedIn post through the
+ * recruiter opportunity path (the only generation flow): builds content
+ * opportunities for the day, selects the deterministic best one, and generates
+ * from it.
+ */
+async function generatePostViaOpportunity(dayNumber: number) {
+  const oppGen = await generateContentOpportunitiesForDayAction({ dayNumber });
+  if (!oppGen.success) throw new Error(oppGen.error);
+  const opportunities = oppGen.opportunities;
+  const opportunity =
+    opportunities.find((o) => o.status === "selected") ?? opportunities[0];
+  if (!opportunity) {
+    throw new Error("No content opportunities were created for the submitted day.");
+  }
+  const draft = await generatePostFromOpportunityAction(opportunity.id);
+  if (!draft.success) throw new Error(draft.error);
+  return draft.post;
+}
+
 // ─── The pipeline ─────────────────────────────────────────────────────────────
 
 describe("End-to-end content pipeline (3A → 3G-C)", () => {
@@ -448,10 +481,7 @@ describe("End-to-end content pipeline (3A → 3G-C)", () => {
     expect(submitted.status).toBe("submitted");
 
     // ── Phase 3D/3E: generation through the server action (fallback provider)
-    const genResult = await regeneratePost(1);
-    expect(genResult.success).toBe(true);
-    if (!genResult.success) throw new Error(genResult.error.message);
-    const post = genResult.post;
+    const post = await generatePostViaOpportunity(1);
     expect(post.status).toBe("draft");
     expect(post.provider).toBe("fallback");
     expect(post.model).toBe("template-v1");
@@ -541,14 +571,22 @@ describe("End-to-end content pipeline (3A → 3G-C)", () => {
 
   it("does not republish on a second cron run after success", async () => {
     await createJournalEntry({ day_number: 1 }).then(async (entry) => {
-      await updateJournalEntry(entry.id, { what_i_learned: "Something worth sharing today." });
+      await updateJournalEntry(entry.id, {
+        what_i_learned: "How semantic HTML improves screen reader navigation.",
+        what_i_practiced: "Wrote my first accessible page structure.",
+        what_i_built: "A personal profile page in plain HTML.",
+        challenge: "Remembering which tags are semantic.",
+        how_i_solved_it: "Reviewed MDN and listed them out.",
+        key_takeaway: "Semantic HTML is accessibility.",
+        tomorrow_focus: "Forms and inputs.",
+        confidence_level: 4,
+      });
       await submitJournalEntry(entry.id);
     });
-    const genResult = await regeneratePost(1);
-    if (!genResult.success) throw new Error(genResult.error.message);
-    await approvePost(genResult.post.id);
+    const post = await generatePostViaOpportunity(1);
+    await approvePost(post.id);
     const schedule = await schedulePost({
-      post_id: genResult.post.id,
+      post_id: post.id,
       scheduled_at: new Date(Date.now() + 60_000).toISOString(),
     });
     (schedule.scheduled_at as string) = new Date(Date.now() - 1000).toISOString();

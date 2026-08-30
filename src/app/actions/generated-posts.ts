@@ -8,7 +8,6 @@ import {
   deleteGeneratedPost,
   updatePublishState,
 } from "@/services/generated-posts";
-import { generatePostForDay } from "@/services/ai/generation";
 import { getAccessToken, getConnectionStatus, buildMemberUrn, publishToLinkedIn, loadPostImage } from "@/services/linkedin";
 import { updateContentOpportunityStatus } from "@/services/recruiter/persistence";
 import { createWriteClient } from "@/lib/supabase/server";
@@ -18,7 +17,6 @@ import type {
   GeneratedPostStatus,
   UpdateGeneratedPostInput,
 } from "@/types/generated-post";
-import type { PostFormat } from "@/types/ai";
 import type { RecruiterQualityReport } from "@/types/recruiter-quality";
 import { evaluateApproveGate } from "@/services/recruiter/quality";
 import { evaluateRecruiterPostForSavedPost } from "@/services/recruiter/quality-service";
@@ -151,20 +149,6 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
 export type PostPublishResult =
   | { success: true; post: GeneratedPostRow }
   | { success: false; error: { code: string; message: string } };
-
-export async function regeneratePost(
-  dayNumber: number,
-  format?: PostFormat,
-): Promise<PostActionResult> {
-  try {
-    const post = await generatePostForDay(dayNumber, format);
-    return { success: true, post };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to regenerate post.";
-    const code = err instanceof Error && "code" in err ? (err as { code: string }).code : "GENERATION_FAILED";
-    return { success: false, error: { code, message } };
-  }
-}
 
 /**
  * Phase 5D regeneration of an opportunity-backed post: produces a NEW draft

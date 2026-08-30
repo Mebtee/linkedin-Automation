@@ -546,16 +546,16 @@ export function JournalForm({
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           <div className="flex gap-3">
             <Link
-              href="/dashboard"
+              href="/opportunities"
               className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             >
-              Back to Dashboard
+              Back to Workspace
             </Link>
             <Link
-              href="/curriculum"
+              href="/course-materials"
               className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             >
-              View Curriculum
+              Upload Materials
             </Link>
           </div>
 

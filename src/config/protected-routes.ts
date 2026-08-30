@@ -1,6 +1,4 @@
 export const PROTECTED_ROUTES = [
-  "/dashboard",
-  "/curriculum",
   "/journal",
   "/course-materials",
   "/posts",

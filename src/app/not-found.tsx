@@ -13,10 +13,10 @@ export default function NotFound() {
         The page you are looking for does not exist.
       </p>
       <Link
-        href="/dashboard"
+        href="/opportunities"
         className="mt-6 inline-block rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
-        Back to dashboard
+        Back to workspace
       </Link>
     </div>
   );

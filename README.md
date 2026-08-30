@@ -1,13 +1,17 @@
-# 105-Day Learning Journey
+# LinkedIn Recruiter Content
 
-A personal AI-powered LinkedIn content automation system tracking a 105-day
-full-stack learning journey. Built with Next.js (App Router), TypeScript and
-Supabase, designed to operate with $0 required cost.
+An AI-powered LinkedIn content automation system that turns a learning journal
+and uploaded course materials into evidence-grounded, recruiter-focused content
+opportunities. Built with Next.js (App Router), TypeScript and Supabase,
+designed to operate with $0 required cost.
 
-> **Current phase: 1C — Environment & Configuration.** The technical foundation
-> and the environment/configuration system are in place. LinkedIn, AI generation,
-> image generation, scheduling, automation, journaling and publishing are
-> **not implemented**.
+The canonical flow: Course PDF → evidence extraction → journal / evidence
+confirmation → content opportunities → recruiter scoring → content brief →
+post generation → recruiter quality review → visual → review / approve → manual
+LinkedIn publish. `/opportunities` is the primary workspace; `/` redirects there.
+
+> For the full recruiter product spec (taxonomy, scoring, evidence safety,
+> generation, quality, publishing), see [RECRUITER_CONTENT.md](./RECRUITER_CONTENT.md).
 
 ## Stack
 
@@ -20,14 +24,14 @@ Supabase, designed to operate with $0 required cost.
 
 ```
 src/
-  app/              # Routes (dashboard, curriculum, journal, posts, schedule, settings, api/health)
+  app/              # Routes (opportunities, journal, course-materials, posts, schedule, settings, api/*)
   components/       # UI components; client components only where interaction requires it
   services/         # Service-oriented layer (business logic lives here, not in components)
-  lib/              # Low-level helpers (errors, future supabase/auth/security)
+  lib/              # Low-level helpers (errors, supabase/auth/security)
   types/            # Shared domain types
   config/           # app, brand, content + typed env (env.ts public, env.server.ts server-only)
-supabase/migrations/  # Future Supabase migrations
-scripts/seed-curriculum/  # Future curriculum seeding scripts
+supabase/migrations/  # Supabase migrations
+scripts/seed-curriculum/  # Curriculum seeding scripts
 ```
 
 ## Environment
@@ -37,8 +41,8 @@ variable, its scope and when it becomes required.
 
 - `.env.example` is the committed template — copy it to `.env.local`.
 - Public variables use the `NEXT_PUBLIC_` prefix; secrets are server-only.
-- No variables are required in this phase; secrets are never committed and are
-  never exposed by the API.
+- Secrets are never committed and are never exposed by the API; see
+  [SECURITY.md](./SECURITY.md).
 
 ## Getting started
 

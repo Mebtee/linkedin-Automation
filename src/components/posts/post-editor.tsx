@@ -21,7 +21,6 @@ import {
   updatePost,
   approvePost,
   deletePost,
-  regeneratePost,
   regenerateOpportunityPost,
   publishPost,
 } from "@/app/actions/generated-posts";
@@ -283,12 +282,17 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
     setIsRegenerating(true);
 
     try {
-      // Opportunity-backed posts regenerate from the SAME opportunity +
-      // evidence (Phase 5D), producing a new candidate. Journal-only posts
-      // keep the classic day-based regeneration.
-      const result = currentPost.opportunity_id
-        ? await regenerateOpportunityPost(currentPost.opportunity_id)
-        : await regeneratePost(currentPost.day_number, currentPost.format);
+      if (!currentPost.opportunity_id) {
+        showToast(
+          "error",
+          "This post is not linked to a content opportunity and cannot be regenerated.",
+        );
+        return;
+      }
+
+      // Post regenerates from the SAME opportunity + evidence (Phase 5D),
+      // producing a new candidate.
+      const result = await regenerateOpportunityPost(currentPost.opportunity_id);
 
       if (result.success) {
         applyPost(result.post, result.quality ?? null);
@@ -307,8 +311,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
   }, [
     isRegenerating,
     currentPost.opportunity_id,
-    currentPost.day_number,
-    currentPost.format,
     currentPost.id,
     applyPost,
     router,

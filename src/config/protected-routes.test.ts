@@ -5,8 +5,6 @@ import { AUTH_ROUTES, PROTECTED_ROUTES } from "./protected-routes";
 describe("protected-routes", () => {
   it("protects every authenticated workspace route", () => {
     for (const route of [
-      "/dashboard",
-      "/curriculum",
       "/journal",
       "/course-materials",
       "/posts",

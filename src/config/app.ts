@@ -4,17 +4,15 @@ export type NavigationItem = {
 };
 
 export const app = {
-  id: "105-day-learning-journey",
-  name: "105-Day Learning Journey",
-  version: "0.1.0",
+  id: "linkedin-recruiter-content",
+  name: "LinkedIn Recruiter Content",
+  version: "5.1.0",
   description:
-    "A personal AI-powered LinkedIn content automation system tracking a 105-day full-stack learning journey.",
+    "An AI-powered LinkedIn content automation system that turns your learning journal and course materials into recruiter-focused content opportunities.",
   navigation: [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/curriculum", label: "Curriculum" },
+    { href: "/opportunities", label: "Opportunities" },
     { href: "/journal", label: "Journal" },
     { href: "/course-materials", label: "Materials" },
-    { href: "/opportunities", label: "Opportunities" },
     { href: "/posts", label: "Posts" },
     { href: "/schedule", label: "Schedule" },
     { href: "/settings", label: "Settings" },

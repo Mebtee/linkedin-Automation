@@ -25,40 +25,6 @@ export type ModuleForInput = {
   readonly title: string;
 };
 
-// ─── Format Selection ────────────────────────────────────────────────────────
-
-const AVAILABLE_FORMATS: readonly PostFormat[] = [
-  "what-i-learned",
-  "challenge",
-  "small-win",
-  "project",
-  "concept",
-  "reflection",
-  "practical-lesson",
-] as const;
-
-/**
- * Selects a post format deterministically based on the day number.
- *
- * Formula: formatIndex = (dayNumber - 1) % availableFormats.length
- *
- * This ensures:
- *   - Day 1 → what-i-learned (index 0)
- *   - Day 2 → challenge (index 1)
- *   - Day 3 → small-win (index 2)
- *   - ...
- *   - Day 7 → practical-lesson (index 6)
- *   - Day 8 → what-i-learned (index 0)
- *   - Day 105 → what-i-learned (index 0, since 104 % 7 = 0)
- *
- * The same day always resolves to the same format.
- * No randomness involved.
- */
-export function selectDefaultFormat(dayNumber: number): PostFormat {
-  const index = (dayNumber - 1) % AVAILABLE_FORMATS.length;
-  return AVAILABLE_FORMATS[index]!;
-}
-
 // ─── Input Builder ───────────────────────────────────────────────────────────
 
 /**

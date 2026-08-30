@@ -6,7 +6,6 @@ import type { JournalEntry } from "@/types/journal";
 import type { CurriculumDayRow } from "@/services/curriculum/dayProgress";
 import { getTextGenerationProvider } from "./index";
 import { validateGeneratedPostPayload } from "./validation";
-import { buildPostGenerationInput, selectDefaultFormat } from "./input-builder";
 import { createContentHash } from "@/services/generated-posts/hashing";
 import { createGeneratedPost, checkDuplicatePost } from "@/services/generated-posts";
 
@@ -98,7 +97,7 @@ async function loadJournalEntry(
 }
 
 // Export the loaders so the recruiter opportunity path (Phase 5C) reuses the
-// exact same helpers as the daily path — there is only one pipeline.
+// exact same helpers — there is only one pipeline.
 export {
   loadCurriculumDay as loadCurriculumDayForRecruiter,
   loadModule as loadModuleForRecruiter,
@@ -107,9 +106,9 @@ export {
 
 // ─── Shared Generation Core (Phase 5C) ───────────────────────────────────────
 // The provider-call → validate → hash → duplicate-check → persist core shared
-// by the daily path (generatePostForDay) and the recruiter opportunity path
-// (src/services/recruiter/generation.ts). Both paths build a PostGenerationInput
-// and delegate here — there is exactly ONE generation pipeline.
+// by the recruiter opportunity path (src/services/recruiter/generation.ts).
+// The recruiter path builds a PostGenerationInput and delegates here — there
+// is exactly ONE generation pipeline.
 
 export type GeneratePostCoreParams = {
   readonly dayNumber: number;
@@ -208,75 +207,4 @@ export async function generatePostFromPreparedInput(
   const savedPost = await createGeneratedPost(createInput);
 
   return savedPost;
-}
-
-// ─── Main Generation Function (existing daily path) ──────────────────────────
-
-/**
- * Generates a LinkedIn post for a specific curriculum day.
- *
- * Flow:
- *   1. Authenticate user
- *   2. Validate day number
- *   3. Load curriculum day + module
- *   4. Load journal entry (must be submitted)
- *   5. Build PostGenerationInput
- *   6. Select post format
- *   7. Delegate to the shared generation core
- *   8. Return saved post
- *
- * The generated post always starts as "draft".
- * Generation never auto-approves or auto-publishes.
- */
-export async function generatePostForDay(
-  dayNumber: number,
-  format?: PostFormat,
-): Promise<GeneratedPostRow> {
-  // 1. Authenticate
-  const supabase = await createClient();
-  const user = await requireAuth(supabase);
-
-  // 2. Validate day number
-  if (typeof dayNumber !== "number" || !Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 105) {
-    throw new AppError(
-      `Invalid day number ${dayNumber}. Must be between 1 and 105.`,
-      { code: "VALIDATION_ERROR" },
-    );
-  }
-
-  // 3. Load curriculum day
-  const curriculumDay = await loadCurriculumDay(supabase, dayNumber);
-
-  // 4. Load module
-  const moduleData = await loadModule(supabase, curriculumDay.module_id);
-
-  // 5. Load journal entry
-  const journal = await loadJournalEntry(supabase, user.id, dayNumber);
-
-  // 6. Verify journal is submitted
-  if (journal.status !== "submitted") {
-    throw new AppError(
-      `Journal entry for Day ${dayNumber} must be submitted before generating a post. Current status: ${journal.status}.`,
-      { code: "JOURNAL_NOT_SUBMITTED" },
-    );
-  }
-
-  // 7. Select format
-  const selectedFormat = format ?? selectDefaultFormat(dayNumber);
-
-  // 8. Build input
-  const input = buildPostGenerationInput({
-    curriculumDay,
-    module: moduleData,
-    journal,
-    format: selectedFormat,
-  });
-
-  // 9–13. Delegate to the shared core (provider, validation, hash, dupes, persist)
-  return generatePostFromPreparedInput({
-    dayNumber,
-    journalEntryId: journal.id,
-    format: selectedFormat,
-    input,
-  });
 }

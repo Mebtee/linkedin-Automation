@@ -1,5 +1,3 @@
-import { AppError } from "@/lib/utils/errors";
-
 // ─── Image Template ─────────────────────────────────────────────────────────
 
 export type ImageTemplate =
@@ -34,21 +32,6 @@ export type VisualTheme =
   | "reflection"
   | "achievement";
 
-export const VISUAL_THEMES: readonly VisualTheme[] = [
-  "learning-concept",
-  "project-build",
-  "problem-solving",
-  "technical-explanation",
-  "security",
-  "career-growth",
-  "reflection",
-  "achievement",
-] as const;
-
-/**
- * Reusable content compositions. Each explains the idea of the post at a glance
- * using its own layout (rather than a single generic template).
- */
 export type VisualComposition =
   | "concept-flow"
   | "problem-solution"
@@ -58,17 +41,6 @@ export type VisualComposition =
   | "skill-progression"
   | "comparison"
   | "input-process-output";
-
-export const VISUAL_COMPOSITIONS: readonly VisualComposition[] = [
-  "concept-flow",
-  "problem-solution",
-  "three-ideas",
-  "architecture-flow",
-  "before-after",
-  "skill-progression",
-  "comparison",
-  "input-process-output",
-] as const;
 
 /**
  * Recruiter-aware visual emphasis (Phase 5H). Derived only from supported
@@ -169,27 +141,6 @@ export interface ImageProviderResult {
   readonly width: number;
   readonly height: number;
   readonly template: ImageTemplate;
-}
-
-// ─── Image Generation Error ─────────────────────────────────────────────────
-
-export type ImageGenerationErrorCode =
-  | "IMAGE_PROVIDER_UNAVAILABLE"
-  | "IMAGE_INVALID_INPUT"
-  | "IMAGE_INVALID_OUTPUT"
-  | "IMAGE_GENERATION_FAILED"
-  | "IMAGE_STORAGE_FAILED"
-  | "IMAGE_NOT_FOUND"
-  | "IMAGE_UNAUTHORIZED";
-
-export class ImageGenerationError extends AppError {
-  readonly imageCode: ImageGenerationErrorCode;
-
-  constructor(message: string, options: { code: ImageGenerationErrorCode; cause?: unknown }) {
-    super(message, { code: options.code, cause: options.cause });
-    this.name = "ImageGenerationError";
-    this.imageCode = options.code;
-  }
 }
 
 // ─── Image Generation Provider ──────────────────────────────────────────────

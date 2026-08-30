@@ -10,7 +10,7 @@ function safeRedirectPath(value: string | null): string {
   if (value && value.startsWith("/") && !value.startsWith("//")) {
     return value;
   }
-  return "/dashboard";
+  return "/opportunities";
 }
 
 export async function GET(request: Request) {
