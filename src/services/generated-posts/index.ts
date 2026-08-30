@@ -329,14 +329,13 @@ export async function deleteGeneratedPost(
   const supabase = await createClient();
   const user = await requireAuth(supabase);
 
-  const existing = await loadOwnPost(supabase, user.id, postId);
+  // Validate the post exists and belongs to this user (any status may be
+  // deleted, including published, so the day can be reused).
+  await loadOwnPost(supabase, user.id, postId);
 
-  // Only draft and failed posts can be deleted
-  if (existing.status === "published") {
-    throw new AppError("Cannot delete a published post.", {
-      code: "INVALID_STATUS",
-    });
-  }
+  // Delete the associated media asset first (metadata + storage file) so
+  // deleting a post never leaves an orphaned image or broken media route.
+  await deletePostImage(supabase, user.id, postId);
 
   const { error } = await supabase
     .from("generated_posts")
@@ -349,6 +348,30 @@ export async function deleteGeneratedPost(
       code: "DATABASE_ERROR",
       cause: error,
     });
+  }
+}
+
+/**
+ * Removes a post's stored image (storage blob + metadata row), if present.
+ * The media_assets row is cascade-deleted by the DB on post delete, but the
+ * storage file is not, so we remove it explicitly and delete the metadata row
+ * ourselves to avoid relying on orphaning either.
+ */
+async function deletePostImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  postId: string,
+): Promise<void> {
+  const { data } = await supabase
+    .from("media_assets")
+    .select("storage_path, id")
+    .eq("generated_post_id", postId)
+    .eq("profile_id", userId)
+    .maybeSingle();
+
+  if (data?.storage_path) {
+    await supabase.storage.from("post-images").remove([data.storage_path]);
+    await supabase.from("media_assets").delete().eq("id", data.id);
   }
 }
 

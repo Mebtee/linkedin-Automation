@@ -64,7 +64,9 @@ export function DeletePostDialog({
           id="delete-dialog-desc"
           className="mt-2 text-sm text-zinc-600 dark:text-zinc-400"
         >
-          Your generated draft will be removed. This action cannot be undone.
+          Your post record will be removed from this app. This action cannot be
+          undone. Note: deleting a post does not remove anything already
+          published to LinkedIn.
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button
