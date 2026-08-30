@@ -34,6 +34,7 @@ const ALL_COMPOSITIONS: VisualComposition[] = [
   "before-after",
   "skill-progression",
   "comparison",
+  "input-process-output",
 ];
 
 describe("renderVisualBrief", () => {
@@ -116,5 +117,26 @@ describe("renderVisualBrief", () => {
     expect(svg).toContain("PROBLEM");
     expect(svg).toContain("SOLUTION");
     expect(svg).toContain("RESULT");
+  });
+
+  it("renders the primary concept as a small Level-1 tag when present", () => {
+    const svg = renderVisualBrief(makeBrief({ primaryConcept: "Row-Level Security" }));
+    expect(svg).toContain("ROW-LEVEL SECURITY");
+  });
+
+  it("renders an input-process-output composition with stage framing", () => {
+    const svg = renderVisualBrief(makeBrief({ composition: "input-process-output", theme: "learning-concept" }));
+    expect(svg).toContain("INPUT");
+    expect(svg).toContain("PROCESS");
+    expect(svg).toContain("OUTPUT");
+    expect(checkSvgSafety(svg)).toBeNull();
+  });
+
+  it("keeps critical content inside a safe margin (no overflow coordinates)", () => {
+    for (const composition of ALL_COMPOSITIONS) {
+      const svg = renderVisualBrief(makeBrief({ composition, headline: "A long headline that wraps onto a second line safely within the mobile canvas" }));
+      expect(svg).toContain("<svg");
+      expect(checkSvgSafety(svg)).toBeNull();
+    }
   });
 });

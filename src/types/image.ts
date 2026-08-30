@@ -56,7 +56,8 @@ export type VisualComposition =
   | "architecture-flow"
   | "before-after"
   | "skill-progression"
-  | "comparison";
+  | "comparison"
+  | "input-process-output";
 
 export const VISUAL_COMPOSITIONS: readonly VisualComposition[] = [
   "concept-flow",
@@ -66,7 +67,30 @@ export const VISUAL_COMPOSITIONS: readonly VisualComposition[] = [
   "before-after",
   "skill-progression",
   "comparison",
+  "input-process-output",
 ] as const;
+
+/**
+ * Recruiter-aware visual emphasis (Phase 5H). Derived only from supported
+ * signals — the post type and structure — and NEVER exposes an internal quality
+ * score, dimension detail, or hidden reasoning inside the image. It only steers
+ * which layout emphasizes what (problem→diagnosis→solution, architecture, etc.).
+ */
+export type RecruiterEmphasis =
+  | "problem-solve"
+  | "architecture"
+  | "concept-explanation"
+  | "security-flow"
+  | "simple";
+
+export const RECRUITER_EMPHASES: readonly RecruiterEmphasis[] = [
+  "problem-solve",
+  "architecture",
+  "concept-explanation",
+  "security-flow",
+  "simple",
+] as const;
+
 
 /**
  * Structured, evidence-safe description of what the image should communicate.
@@ -103,6 +127,18 @@ export interface VisualBrief {
   readonly theme: VisualTheme;
   /** Deterministic composition chosen from the theme/post type. */
   readonly composition: VisualComposition;
+
+  // ─── Phase 5H structured concept priority (optional for back-compat) ───────
+  /** The single dominant idea the visual must lead with. */
+  readonly primaryConcept?: string;
+  /** 2–4 supporting concepts that reinforce the primary idea. */
+  readonly secondaryConcepts?: readonly string[];
+  /** Optional contextual concepts that must NOT compete with the primary. */
+  readonly optionalContext?: readonly string[];
+  /** Recruiter-aware emphasis hint (never exposes an internal score). */
+  readonly emphasis?: RecruiterEmphasis;
+  /** Post format (Phase 3B journal-content taxonomy) when known. */
+  readonly postFormat?: string;
 }
 
 // ─── Image Generation Input ─────────────────────────────────────────────────

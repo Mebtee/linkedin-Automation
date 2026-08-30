@@ -1,5 +1,6 @@
 import { AppError } from "@/lib/utils/errors";
-import type { ImageGenerationInput } from "@/types/image";
+import type { ImageGenerationInput, VisualBrief } from "@/types/image";
+import { RECRUITER_EMPHASES } from "@/types/image";
 
 // ─── Input Validation ───────────────────────────────────────────────────────
 
@@ -103,6 +104,78 @@ export function validateImageOutput(output: unknown): { svg: string; width: numb
     width: obj.width,
     height: obj.height,
   };
+}
+
+// ─── Visual Brief Validation (Phase 5H) ─────────────────────────────────────
+
+/**
+ * Tokens that would indicate an unsupported / invented claim if they ever
+ * appeared on an image. None are produced by the evidence-safe extractors, so
+ * their presence is a reliable signal of hallucination or a regression.
+ */
+const HALLUCINATION_TOKENS = [
+  "users",
+  "revenue",
+  "million",
+  "customers",
+  " years of experience",
+  " years experience",
+  "certified",
+  "10k",
+  "5k",
+  "10,000",
+  "clients",
+];
+
+/**
+ * Validates a VisualBrief for mobile-safe length limits and anti-hallucination.
+ * Returns a list of issues (empty means valid). It never throws — callers can
+ * fall back gracefully when issues are found.
+ */
+export function validateVisualBrief(brief: VisualBrief): string[] {
+  const issues: string[] = [];
+  if (!brief) return ["visualBrief is required"];
+
+  if (!brief.headline || brief.headline.trim() === "") {
+    issues.push("headline is empty");
+  } else if (brief.headline.length > 60) {
+    issues.push(`headline exceeds 60 chars (${brief.headline.length})`);
+  }
+
+  if (brief.subheadline && brief.subheadline.length > 110) {
+    issues.push(`subheadline exceeds 110 chars (${brief.subheadline.length})`);
+  }
+
+  for (const kp of brief.keyPoints ?? []) {
+    if (kp.label.length > 30) issues.push(`key point label exceeds 30 chars: "${kp.label}"`);
+    if (kp.detail.length > 44) issues.push("key point detail exceeds 44 chars");
+  }
+
+  const metaphors = brief.visualMetaphor ? brief.visualMetaphor.split("→") : [];
+  for (const m of metaphors) {
+    if (m.trim().length > 24) issues.push(`metaphor node exceeds 24 chars: "${m.trim()}"`);
+  }
+
+  if (brief.emphasis && !RECRUITER_EMPHASES.includes(brief.emphasis)) {
+    issues.push(`unknown emphasis: ${brief.emphasis}`);
+  }
+
+  // Anti-hallucination: reject fabricated metrics/claims anywhere in the brief.
+  const scanTarget = [
+    brief.headline,
+    brief.subheadline,
+    brief.concept,
+    brief.visualMetaphor,
+    ...(brief.keyPoints ?? []).map((k) => `${k.label} ${k.detail}`),
+    ...(brief.technologies ?? []),
+  ].join(" ").toLowerCase();
+  for (const token of HALLUCINATION_TOKENS) {
+    if (scanTarget.includes(token)) {
+      issues.push(`potential unsupported claim: "${token.trim()}"`);
+    }
+  }
+
+  return issues;
 }
 
 // ─── Image Validation Error ─────────────────────────────────────────────────

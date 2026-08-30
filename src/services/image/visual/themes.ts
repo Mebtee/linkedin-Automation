@@ -2,6 +2,7 @@ import type {
   VisualTheme,
   VisualComposition,
   VisualKeyPoint,
+  RecruiterEmphasis,
 } from "@/types/image";
 
 // ─── Visual Theme Selection (Phase 5G) ───────────────────────────────────────
@@ -108,8 +109,16 @@ export function selectComposition(input: CompositionInput): VisualComposition {
       return "three-ideas";
     case "learning-concept":
     default:
+      // If the content reads as a step-by-step process, use the IP/O renderer.
+      if (looksLikeProcess(input.text)) return "input-process-output";
       return input.keyPointCount >= 3 ? "three-ideas" : "concept-flow";
   }
+}
+
+/** True when the content suggests an input → process → output flow. */
+function looksLikeProcess(text: string): boolean {
+  const t = text.toLowerCase();
+  return /input|process|pipeline|workflow|request|query|flow|function|steps?|sequence/.test(t);
 }
 
 function compositionForPostType(postType: string): VisualComposition | null {
@@ -122,15 +131,58 @@ function compositionForPostType(postType: string): VisualComposition | null {
     case "PROJECT_SHOWCASE":
     case "API_INTEGRATION":
       return "architecture-flow";
+    case "DEPLOYMENT_STORY":
+      return "architecture-flow";
     case "CAREER_PROGRESS":
+    case "LEARNING_MILESTONE":
       return "skill-progression";
+    case "ENGINEERING_DECISION":
+      return "comparison";
     case "DATABASE_ENGINEERING":
     case "TECHNICAL_LESSON":
-    case "AI_ENGINEERING":
       return "concept-flow";
+    case "AI_ENGINEERING":
+      return "three-ideas";
     default:
       return null;
   }
+}
+
+// ─── Recruiter-aware emphasis (Phase 5H) ─────────────────────────────────────
+// Steers the composition's visual emphasis. Derived ONLY from post type/format
+// and supported structure — never from an internal quality score or report.
+
+export interface EmphasisInput {
+  readonly postType?: string | null;
+  readonly format?: string;
+  readonly text: string;
+}
+
+export function selectEmphasis(input: EmphasisInput): RecruiterEmphasis {
+  if (input.postType) {
+    switch (input.postType) {
+      case "PROBLEM_SOLUTION":
+      case "DEBUGGING_STORY":
+      case "DEPLOYMENT_STORY":
+        return "problem-solve";
+      case "SECURITY_LESSON":
+        return "security-flow";
+      case "PROJECT_SHOWCASE":
+      case "API_INTEGRATION":
+      case "DATABASE_ENGINEERING":
+      case "AI_ENGINEERING":
+        return "architecture";
+      case "TECHNICAL_LESSON":
+      case "LEARNING_MILESTONE":
+        return "concept-explanation";
+      default:
+        break;
+    }
+  }
+  if (/security|auth|rls|encryption/.test(input.text)) return "security-flow";
+  if (/problem|bug|debug|fix|error|bottleneck/.test(input.text)) return "problem-solve";
+  if (/architecture|pipeline|deploy|database|api/.test(input.text)) return "architecture";
+  return "concept-explanation";
 }
 
 // ─── Shared rendering helpers used by compositions ───────────────────────────

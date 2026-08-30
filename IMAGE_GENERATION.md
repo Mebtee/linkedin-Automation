@@ -211,6 +211,73 @@ Format: `"Day {X} of 105 DAYS OF FULL-STACK DEVELOPMENT: {topic}"`
 
 $0 — all programmatic SVG generation. No external APIs, no paid services.
 
+## Visual Brief System (Phase 5G / 5H)
+
+On top of the classic templates, the provider renders a **visual brief** — a
+structured description of the post's content — when it is available and passes
+validation. This produces post-aware, concept-priority visuals rather than a
+generic template.
+
+### Concept-Priority Pipelines
+
+Built from the final post text (not the AI prompt), so nothing is invented:
+
+1. **Smart text extraction** (`visual/brief.ts`)
+   - `cleanVisualText()` strips hashtags, emojis, URLs, `@handles`, and filler
+     phrases ("today i", "i learned", "let me share").
+   - Key points are extracted from detected concept-chain nodes, never
+     fabricated.
+2. **Concept chains** (`visual/concept-chains.ts`)
+   - Deterministic, first-match-wins mappings from curriculum/post text to
+     technical concepts (e.g. RLS → "Row-Level Security", `index` → "Database
+     Index", REST API, auth, git, debugging, engineering tradeoffs, deployment).
+   - `detectTopConcepts(text, topic)` returns `{ primary, secondary, optional }`
+     — one strong idea per image.
+   - No `Math.random()`; all selection is deterministic.
+3. **Themes & composition** (`visual/themes.ts`)
+   - `selectComposition()` picks a composition from post type + content shape.
+     Learning/process-like text maps to `input-process-output`; engineering
+     decisions → `comparison`; AI engineering → `three-ideas`; deployments →
+     `architecture-flow`; milestones → `skill-progression`.
+   - `selectEmphasis()` returns a `RecruiterEmphasis` (`problem-solve`,
+     `architecture`, `concept-explanation`, `security-flow`, `simple`).
+
+### Anti-Hallucination
+
+- `visual/validation.ts` `validateVisualBrief()` blocks unsupported claims
+  (metric tokens such as "users", "million", "10,000", "certified",
+  "years of experience", etc.) and enforces length caps.
+- The provider **only** renders the composition path when the brief passes
+  validation cleanly; otherwise it falls back to the classic template (which
+  itself falls back to the minimal fallback SVG if needed).
+- Only exact post/curriculum concepts and verified metadata are ever shown.
+- Internal quality scores/evidence are never exposed to the viewer.
+
+### Recruiter-Aware Design
+
+- `RecruiterEmphasis` only surfaces recruiter-relevant signals (problem solving,
+  architecture, concept depth, security flow) when the content genuinely
+  supports them.
+- The primary concept is rendered as a Level-1 uppercase tag pill; a wrapped
+  headline (≤2 lines) sits below; subheadline wraps to ≤2 lines.
+
+### Mobile-Safe Layout
+
+- Canvas: 1200×1200 with 70–90px safe margins on every edge.
+- Content is centered and sized for legibility at preview scale.
+- Caps: headline ≤60 chars, subheadline ≤110, key-point labels ≤30, metaphor
+  nodes ≤24 chars.
+
+### Compositions (8)
+
+`concept-flow`, `problem-solution`, `comparison`, `three-ideas`, `pros-cons`,
+`architecture-flow`, `skill-progression`, and `input-process-output` (added in
+5H: three INPUT/PROCESS/OUTPUT stages with arrows and caption pills).
+
+Each composition reuses shared primitives in `visual/compositions/draw.ts`
+(headline wrapping, tag pills, safe margins) from
+`visual/compositions/index.ts` (`renderVisualBrief`).
+
 ## Testing
 
 Tests cover:
@@ -241,6 +308,11 @@ Tests cover:
 | `src/services/image/svg/template-selector.ts` | Template selection |
 | `src/services/image/svg/topic-visuals.ts` | Topic mapping |
 | `src/services/image/svg/fallback.ts` | Fallback SVG |
+| `src/services/image/visual/brief.ts` | Visual brief builder (concept priority, text extraction, emphasis) |
+| `src/services/image/visual/themes.ts` | Theme/emphasis/composition selection |
+| `src/services/image/visual/concept-chains.ts` | Concept chain detection + `detectTopConcepts` |
+| `src/services/image/visual/compositions/` | 8 composition renderers + shared `draw` primitives |
+| `src/services/image/validation.ts` | Input/output + `validateVisualBrief` |
 | `src/app/actions/post-images.ts` | Server actions |
 | `src/components/posts/image-section.tsx` | Editor image UI |
 | `supabase/migrations/20260817400000_media_assets.sql` | DB migration |

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { selectTheme, selectComposition, clampKeyPoints, truncate } from "./themes";
-import type { VisualTheme } from "@/types/image";
+import { selectTheme, selectComposition, selectEmphasis, clampKeyPoints, truncate } from "./themes";
+import type { VisualTheme, RecruiterEmphasis } from "@/types/image";
 
 describe("selectTheme", () => {
   const base = { format: "concept", text: "learning about x", topic: "x" };
@@ -66,6 +66,53 @@ describe("selectComposition", () => {
 
   it("learn picks concept-flow when <3 key points", () => {
     expect(selectComposition({ theme: "learning-concept", text: "learn", keyPointCount: 2, postType: null })).toBe("concept-flow");
+  });
+
+  it("uses comparison for an engineering decision", () => {
+    expect(selectComposition({ theme: "project-build", text: "decision", keyPointCount: 2, postType: "ENGINEERING_DECISION" })).toBe("comparison");
+  });
+
+  it("uses three-ideas for AI engineering", () => {
+    expect(selectComposition({ theme: "project-build", text: "ai", keyPointCount: 2, postType: "AI_ENGINEERING" })).toBe("three-ideas");
+  });
+
+  it("uses architecture-flow for deployment stories", () => {
+    expect(selectComposition({ theme: "project-build", text: "deploy", keyPointCount: 2, postType: "DEPLOYMENT_STORY" })).toBe("architecture-flow");
+  });
+
+  it("uses skill-progression for learning milestones", () => {
+    expect(selectComposition({ theme: "learning-concept", text: "milestone", keyPointCount: 2, postType: "LEARNING_MILESTONE" })).toBe("skill-progression");
+  });
+
+  it("uses input-process-output for process-like learning content", () => {
+    expect(selectComposition({ theme: "learning-concept", text: "the request flows through the pipeline", keyPointCount: 2, postType: null })).toBe("input-process-output");
+  });
+});
+
+describe("selectEmphasis", () => {
+  it("is deterministic", () => {
+    expect(selectEmphasis({ text: "bug" })).toBe(selectEmphasis({ text: "bug" }));
+  });
+
+  it("maps problem stories to problem-solve emphasis", () => {
+    expect(selectEmphasis({ text: "debug the error", postType: "DEBUGGING_STORY" })).toBe("problem-solve");
+  });
+
+  it("maps security to security-flow emphasis", () => {
+    expect(selectEmphasis({ text: "rls and auth", postType: "SECURITY_LESSON" })).toBe("security-flow");
+  });
+
+  it("maps build stories to architecture emphasis", () => {
+    expect(selectEmphasis({ text: "api and database", postType: "PROJECT_SHOWCASE" })).toBe("architecture");
+  });
+
+  it("defaults to concept-explanation without strong signals", () => {
+    expect(selectEmphasis({ text: "general notes" })).toBe("concept-explanation");
+  });
+
+  it("returns a valid emphasis enum always", () => {
+    const valid: RecruiterEmphasis[] = ["problem-solve", "architecture", "concept-explanation", "security-flow", "simple"];
+    expect(valid).toContain(selectEmphasis({ text: "anything" }));
   });
 });
 

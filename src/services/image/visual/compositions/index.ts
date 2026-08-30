@@ -10,6 +10,7 @@ import {
   drawDayBadge,
   drawHeadline,
   drawSubheadline,
+  drawPrimaryTag,
 } from "./draw";
 import { clampKeyPoints } from "../themes";
 
@@ -21,8 +22,10 @@ export interface CompositionRenderContext {
 }
 
 // ─── Layout constants ───────────────────────────────────────────────────────
+// Mobile-safe: everything critical stays inside a ~90px safe margin on a square
+// 1200×1200 canvas. Series title at y=80; header block spans ~98–230.
 
-const TOP = 150;
+const TOP = 160;
 
 /** Pixel space occupied by one glyph at a given font size. */
 function fitPills(technologies: readonly string[], y: number): string {
@@ -37,10 +40,14 @@ function fitPills(technologies: readonly string[], y: number): string {
 }
 
 function header(brief: VisualBrief, y: number, subY: number): string {
-  return [
+  const parts = [
+    // Level 1 — the single dominant idea, framed small so it never competes
+    // with the headline but makes the "one message" explicit.
+    drawPrimaryTag(Cx, y - 40, brief.primaryConcept || ""),
     drawHeadline(Cx, y, brief.headline || brief.concept),
     drawSubheadline(Cx, subY, brief.subheadline),
-  ].join("");
+  ];
+  return parts.join("");
 }
 
 function footerBadge(brief: VisualBrief): string {
@@ -259,6 +266,40 @@ function renderComparison(brief: VisualBrief): string {
   ].join("");
 }
 
+// ─── Composition: INPUT_PROCESS_OUTPUT ──────────────────────────────────────
+// Three horizontal stages: INPUT → PROCESS → OUTPUT. Great for concept/how-it-
+// works, functions and pipelines.
+
+function renderInputProcessOutput(brief: VisualBrief): string {
+  const points = clampKeyPoints(brief.keyPoints, 3);
+  const captions = ["INPUT", "PROCESS", "OUTPUT"];
+  const boxW = 240;
+  const boxH = 120;
+  const gap = 90;
+  const totalW = 3 * boxW + 2 * gap;
+  const startX = Cx - totalW / 2;
+  const y = 430;
+
+  const stageAccents = [false, true, false];
+
+  let svg = header(brief, TOP, TOP + 44);
+  captions.forEach((caption, i) => {
+    const x = startX + i * (boxW + gap);
+    // Stage caption above the box so the process structure stays obvious even
+    // when the node carries real post content.
+    svg += `<text x="${x + boxW / 2}" y="${y - 30}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="${brand.colors.cyan}">${caption}</text>`;
+    svg += drawNode(x, y, boxW, boxH, points[i]?.label || caption, { accent: stageAccents[i], sub: points[i]?.detail });
+    if (i < 2) {
+      svg += drawArrow(x + boxW + 6, y + boxH / 2, x + boxW + gap - 6, y + boxH / 2);
+    }
+  });
+
+  const pills = brief.technologies.length ? fitPills(brief.technologies, 620) : "";
+  svg += pills;
+  svg += footerBadge(brief);
+  return svg;
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
 const RENDERERS: Record<VisualComposition, (b: VisualBrief) => string> = {
@@ -269,6 +310,7 @@ const RENDERERS: Record<VisualComposition, (b: VisualBrief) => string> = {
   "before-after": renderBeforeAfter,
   "skill-progression": renderSkillProgression,
   "comparison": renderComparison,
+  "input-process-output": renderInputProcessOutput,
 };
 
 /**

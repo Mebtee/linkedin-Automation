@@ -137,4 +137,55 @@ describe("buildVisualBrief", () => {
     // dayNumber is derived from the real post's journey day, not synthesized.
     expect(brief.dayNumber).toBe(12);
   });
+
+  it("extracts a primary concept and secondary concepts prioritised", () => {
+    const post = makePost({
+      format: "project",
+      body: "I used Supabase RLS to isolate user data and added an index.",
+      opening: "RLS protects each row.",
+    });
+    const brief = buildVisualBrief(ctx(post, "SECURITY_LESSON"));
+    expect(brief.primaryConcept).toBe("Row-Level Security");
+    expect(Array.isArray(brief.secondaryConcepts)).toBe(true);
+    expect((brief.secondaryConcepts ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("derives a recruiter-aware emphasis from post type", () => {
+    const brief = buildVisualBrief(ctx(makePost(), "DEBUGGING_STORY"));
+    expect(brief.emphasis).toBe("problem-solve");
+  });
+
+  it("caps headline and subheadline for mobile safety", () => {
+    const post = makePost({
+      image_headline: "A very long headline that definitely exceeds sixty characters of text content",
+      image_subheadline: "A very long secondary line that also exceeds one hundred characters so we can verify the cap works correctly here",
+    });
+    const brief = buildVisualBrief(ctx(post, "TECHNICAL_LESSON"));
+    expect(brief.headline.length).toBeLessThanOrEqual(60);
+    expect(brief.subheadline.length).toBeLessThanOrEqual(100);
+  });
+
+  it("strips hashtags and emojis from the visual source text", () => {
+    const post = makePost({
+      body: "Great progress on the index 🚀 #Database #SQL",
+      takeaway: "An index avoids a full scan.",
+    });
+    const brief = buildVisualBrief(ctx(post));
+    expect(brief.headline).not.toContain("#");
+    expect(brief.visualMetaphor).not.toContain("🚀");
+    expect(brief.visualMetaphor).not.toContain("#");
+  });
+
+  it("keeps course-only material in learning framing without fabricated metrics", () => {
+    const post = makePost({
+      opening: "In this module we study how indexes work.",
+      body: "Students will build a query plan.",
+      takeaway: "Indexes make lookups faster.",
+    });
+    const brief = buildVisualBrief(ctx(post, "TECHNICAL_LESSON"));
+    // Course framing preserved — no invented production claims.
+    expect(brief.headline.toLowerCase()).not.toContain("built");
+    expect(brief.technologies).not.toContain("Total Users");
+    expect(brief.keyPoints.length).toBeLessThanOrEqual(4);
+  });
 });

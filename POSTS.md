@@ -404,6 +404,12 @@ The editor sidebar includes an `ImageSection` component that provides:
 
 Image concerns are completely separate from text editing. Editing post text does not regenerate the image.
 
+Since Phase 5H, images generated from the editor are **post-aware**: the renderer
+builds a visual brief from the post's final text, picks a concept-priority
+composition and a recruiter-aware emphasis, and validates the brief for
+unsupported claims before rendering. Regenerating an image reflects the current
+(saved) post content. See [IMAGE_GENERATION.md](IMAGE_GENERATION.md#visual-brief-system-phase-5g--5h).
+
 ### Image Actions
 
 | Action | Description |

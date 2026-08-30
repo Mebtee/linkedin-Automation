@@ -94,13 +94,55 @@ export function drawDayBadge(x: number, y: number, dayNumber?: number, module?: 
     <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="600" letter-spacing="2" fill="${c.cyan}" opacity="0.9">${escapeXml(label)}</text>`;
 }
 
-/** Medium uppercase section label (e.g. the concept headline). */
-export function drawHeadline(x: number, y: number, text: string): string {
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="42" font-weight="800" fill="white">${escapeXml(truncate(text, 34))}</text>`;
+/** Wraps text into centered lines that fit a max width at a given font size. */
+function wrapCentered(text: string, maxWidth: number, fontSize: number, maxLines: number): string[] {
+  const approx = fontSize * 0.58;
+  const maxChars = Math.max(4, Math.floor(maxWidth / approx));
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > maxChars) {
+      if (current) lines.push(current.trim());
+      current = w;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current) lines.push(current.trim());
+  return lines.slice(0, maxLines);
 }
 
-/** Lighter subheadline line. */
+/** Medium uppercase section label (e.g. the concept headline). */
+export function drawHeadline(x: number, y: number, text: string): string {
+  if (!text) return "";
+  // Keep content well inside the 90px safe margin (1200 − 180 = 1020px usable).
+  const lines = wrapCentered(truncate(text, 60), 1020, 42, 2);
+  const lineH = 46;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="42" font-weight="800" fill="white">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Lighter subheadline line (wrapped to a safe 2 lines). */
 export function drawSubheadline(x: number, y: number, text: string): string {
   if (!text) return "";
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="20" font-weight="400" fill="${c.cyan}" opacity="0.9">${escapeXml(truncate(text, 60))}</text>`;
+  const lines = wrapCentered(truncate(text, 100), 1000, 20, 2);
+  const lineH = 26;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="20" font-weight="400" fill="${c.cyan}" opacity="0.9">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Small Level-1 emphasis tag that frames the single dominant idea. */
+export function drawPrimaryTag(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const label = truncate(text.toUpperCase(), 34);
+  const w = Math.min(label.length * 13 + 48, 620);
+  return `
+    <rect x="${x - w / 2}" y="${y - 22}" width="${w}" height="44" rx="22"
+          fill="${c.blue}" opacity="0.35" stroke="${c.cyan}" stroke-width="1.25" />
+    <text x="${x}" y="${y + 7}" text-anchor="middle" font-family="${FONT}" font-size="18" font-weight="700" letter-spacing="2" fill="${c.cyan}">${escapeXml(label)}</text>`;
 }

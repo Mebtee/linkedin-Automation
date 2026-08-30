@@ -338,3 +338,33 @@ row's status is best-effort, validated against the enforced transition table in
 - No new DB migration: publish state ships on the existing additive columns
   (`linkedin_post_id`, `published_at`, `publish_error` on `generated_posts`).
 - No tokens or raw provider errors written to the client or `publish_error`.
+
+## Phase 5H — Recruiter-aware visual design
+
+The Phase 5H image upgrade keeps the recruiter-safety contract while making the
+generated visuals concept-priority and recruiter-aware. See
+[IMAGE_GENERATION.md](IMAGE_GENERATION.md#visual-brief-system-phase-5g--5h) for the
+full system; recruiter-relevant rules:
+
+- **Never surfaces internal signals.** Phase 5A quality scores, evidence, or any
+  internal metric are never rendered onto an image.
+- **Recruiter emphasis only when genuinely supported.** `selectEmphasis` maps a
+  post to a `RecruiterEmphasis` (`problem-solve`, `architecture`,
+  `concept-explanation`, `security-flow`, `simple`) derived from actual content,
+  and the emphasis selects the composition — it never fabricates a claim.
+- **Anti-hallucination extends to the image.** `validateVisualBrief` blocks
+  unsupported metric/claim tokens ("users", "million", "10,000", "certified",
+  "years of experience", ...). An invalid brief falls back to the classic
+  template rather than rendering asserted content.
+- **Only exact concepts.** `detectTopConcepts` builds one primary concept (plus
+  secondary/optional) strictly from the final post/curriculum text — nothing is
+  invented or embellished.
+
+## What Phase 5H explicitly did NOT do
+
+- No new image providers, API keys, or secrets; still programmatic SVG + Sharp at
+  $0 cost.
+- No `Math.random()` — all selection is deterministic.
+- No DB migration, no OAuth/publishing/scheduler/opportunity/journal changes.
+- No change to the linked-internal-signal rule: quality scores/evidence never
+  rendered.

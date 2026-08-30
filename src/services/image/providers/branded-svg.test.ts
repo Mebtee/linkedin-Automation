@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { BrandedSvgProvider } from "./branded-svg";
 import type { ImageGenerationInput } from "@/types/image";
 import { brand } from "@/config/brand";
+import { checkSvgSafety } from "../svg/escape";
 
 const validInput: ImageGenerationInput = {
   dayNumber: 1,
@@ -90,5 +91,27 @@ describe("BrandedSvgProvider", () => {
     expect(result.svg).toContain("Git Workflow");
     expect(result.svg).toContain("BRANCH");
     expect(result.svg).toContain("MERGE");
+  });
+
+  it("falls back to the classic template when the visual brief is invalid", async () => {
+    const provider = new BrandedSvgProvider();
+    const invalidBrief: ImageGenerationInput = {
+      ...validInput,
+      visualBrief: {
+        headline: "Scaling to 10,000 users",
+        subheadline: "",
+        concept: "x",
+        visualMetaphor: "A → B",
+        keyPoints: [],
+        technologies: [],
+        theme: "project-build",
+        composition: "concept-flow",
+      },
+    };
+    const result = await provider.generateImage(invalidBrief);
+    // The invalid brief is rejected (unsupported metric) → classic template.
+    expect(result.svg).toContain("105 DAYS OF FULL-STACK DEVELOPMENT");
+    expect(result.svg).not.toContain("10,000");
+    expect(checkSvgSafety(result.svg)).toBeNull();
   });
 });

@@ -28,7 +28,26 @@ interface ChainRule {
   readonly chain: ConceptChain;
 }
 
+/** Word-boundary keyword match — avoids false positives like "ci" in "tracing". */
+function matchesKeyword(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
+function anyKeyword(text: string, keywords: readonly string[]): boolean {
+  return keywords.some((k) => matchesKeyword(text, k));
+}
+
 const CHAIN_RULES: readonly ChainRule[] = [
+  {
+    match: ["row level security", "rls", "ownership", "row-level security", "user isolation"],
+    chain: {
+      title: "Row-Level Security",
+      nodes: ["SHARED ACCESS", "OWNER-ONLY", "RLS ISOLATION"],
+      summary: "RLS lets each user see and change only their own rows.",
+      contrast: ["BEFORE RLS", "WITH RLS"],
+    },
+  },
   {
     match: ["index", "indexes", "indexing"],
     chain: {
@@ -46,7 +65,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["authentication", "auth", "jwt", "oauth"],
+    match: ["authentication", "authorization", "auth", "jwt", "oauth", "session", "login"],
     chain: {
       title: "Authentication & Authorization",
       nodes: ["IDENTITY", "AUTH", "AUTHORIZATION", "SECURE ACCESS"],
@@ -97,12 +116,12 @@ const CHAIN_RULES: readonly ChainRule[] = [
     match: ["testing", "test", "vitest", "jest"],
     chain: {
       title: "Testing",
-      nodes: ["IMPLEMENTATION", "TESTS", "VALIDATION"],
+      nodes: ["CODE", "TESTS", "VALIDATION", "CONFIDENCE"],
       summary: "Tests verify behavior and catch regressions.",
     },
   },
   {
-    match: ["deploy", "deployment", "ci", "ci/cd", "cd"],
+    match: ["deploy", "deployment", "pipeline", "production", "ci/cd"],
     chain: {
       title: "Deployment",
       nodes: ["CODE", "BUILD", "DEPLOY", "PRODUCTION"],
@@ -110,7 +129,24 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["security", "encryption", "login", "password", "secret"],
+    match: ["debug", "bug", "symptom", "stack trace", "root cause", "diagnosis"],
+    chain: {
+      title: "Debugging",
+      nodes: ["SYMPTOM", "INVESTIGATION", "ROOT CAUSE", "FIX"],
+      summary: "Trace a symptom back to its root cause, then fix it.",
+    },
+  },
+  {
+    match: ["tradeoff", "trade-off", "vs", "versus", "compare", "comparison", "decision"],
+    chain: {
+      title: "Engineering Tradeoff",
+      nodes: ["OPTION A", "TRADEOFF", "OPTION B", "DECISION"],
+      summary: "Weigh options by their tradeoffs before deciding.",
+      contrast: ["OPTION A", "OPTION B"],
+    },
+  },
+  {
+    match: ["security", "encryption", "password", "secret", "threat", "vulnerability"],
     chain: {
       title: "Security",
       nodes: ["INPUT", "SECURE HANDLING", "PROTECTED DATA"],
@@ -118,15 +154,15 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["function", "recursion"],
+    match: ["function", "recursion", "closure", "scope"],
     chain: {
-      title: "Functions & Recursion",
+      title: "Functions & Scope",
       nodes: ["INPUT", "FUNCTION", "OUTPUT"],
       summary: "A function maps input to output, optionally by repeating itself.",
     },
   },
   {
-    match: ["array", "list", "data structure"],
+    match: ["array", "list", "data structure", "tree", "hash map"],
     chain: {
       title: "Data Structures",
       nodes: ["COLLECTION", "OPERATION", "RESULT"],
@@ -141,7 +177,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
 export function findConceptChain(text: string): ConceptChain | null {
   const combined = text.toLowerCase();
   for (const rule of CHAIN_RULES) {
-    if (rule.match.some((m) => combined.includes(m))) {
+    if (anyKeyword(combined, rule.match)) {
       return rule.chain;
     }
   }
@@ -181,7 +217,7 @@ export function detectTechnologies(text: string): string[] {
   const combined = text.toLowerCase();
   const found: string[] = [];
   for (const [key, display] of Object.entries(technologies)) {
-    if (combined.includes(key) && !found.includes(display)) {
+    if (matchesKeyword(combined, key) && !found.includes(display)) {
       found.push(display);
     }
   }
@@ -191,4 +227,45 @@ export function detectTechnologies(text: string): string[] {
 /** Splits a multi-line concept into visual key points. */
 export function chainToKeyPoints(chain: ConceptChain): VisualKeyPoint[] {
   return chain.nodes.map((node) => ({ label: node, detail: "" }));
+}
+
+// ─── Concept Priority (Phase 5H) ─────────────────────────────────────────────
+// Distinguishes the single dominant idea from supporting and optional context so
+// the visual leads with one clear message instead of listing every keyword.
+
+export interface ConceptPriority {
+  /** The single dominant concept the visual must lead with. */
+  readonly primary: string;
+  /** Up to 3 reinforcing concepts (drawn smaller, never competing). */
+  readonly secondary: readonly string[];
+  /** Optional context concepts (kept out of the foreground). */
+  readonly optional: readonly string[];
+}
+
+/** Short, safe topic fallback used when no known chain matches. */
+function topicFallback(topic: string): string {
+  const t = (topic || "").trim();
+  if (!t) return "Concept";
+  return t.length > 40 ? `${t.slice(0, 39).trimEnd()}…` : t;
+}
+
+/**
+ * Deterministically ranks the concepts in a post. The first matching chain rule
+ * is the priority-primary concept; later distinct chain titles become secondary.
+ * Never invents concepts — only what the post/curriculum actually mentions.
+ */
+export function detectTopConcepts(text: string, topic: string): ConceptPriority {
+  const combined = `${text} ${topic}`.toLowerCase();
+  const matched: string[] = [];
+  for (const rule of CHAIN_RULES) {
+    if (anyKeyword(combined, rule.match)) {
+      if (!matched.includes(rule.chain.title)) matched.push(rule.chain.title);
+    }
+  }
+
+  const primary = matched[0] ?? topicFallback(topic);
+  const secondary = matched.slice(1, 4);
+  const optional = detectTechnologies(text).filter((t) => !secondary.includes(t)).slice(0, 3);
+
+  return { primary, secondary, optional };
 }

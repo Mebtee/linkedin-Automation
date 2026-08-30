@@ -8,6 +8,7 @@ import { renderTemplate } from "../svg/templates";
 import { generateFallbackSvg } from "../svg/fallback";
 import { checkSvgSafety } from "../svg/escape";
 import { renderVisualBrief } from "../visual/compositions";
+import { validateVisualBrief } from "../validation";
 
 // ─── Branded SVG Provider ───────────────────────────────────────────────────
 // Generates branded SVG images for LinkedIn posts.
@@ -21,7 +22,10 @@ export class BrandedSvgProvider implements ImageGenerationProvider {
     let svg: string;
 
     try {
-      if (input.visualBrief) {
+      // Prefer the content-driven composition when a valid VisualBrief exists.
+      // If the brief fails mobile-safe/anti-hallucination validation, degrade to
+      // the classic template rather than rendering an unsafe/overflowing image.
+      if (input.visualBrief && validateVisualBrief(input.visualBrief).length === 0) {
         svg = renderVisualBrief(input.visualBrief);
       } else {
         svg = renderTemplate(input.template, input);

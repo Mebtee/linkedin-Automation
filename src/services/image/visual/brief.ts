@@ -6,6 +6,7 @@ import type { GeneratedPostRow } from "@/types/generated-post";
 import {
   selectTheme,
   selectComposition,
+  selectEmphasis,
   clampKeyPoints,
   truncate,
 } from "./themes";
@@ -13,19 +14,30 @@ import {
   findConceptChain,
   detectTechnologies,
   chainToKeyPoints,
+  detectTopConcepts,
 } from "./concept-chains";
 
-// ─── Visual Brief Builder (Phase 5G) ────────────────────────────────────────
+// ─── Visual Brief Builder (Phase 5G → 5H) ───────────────────────────────────
 // Deterministically transforms a generated post + curriculum context into a
 // structured VisualBrief that drives the content composition renderers.
 //
+// Phase 5H additions:
+// - Concept-priority ranking (primary / secondary / optional context) so the
+//   visual leads with ONE strong idea instead of listing every keyword.
+// - Smart text extraction that strips hashtags, emojis, generic filler and
+//   motivation fluff before it can appear on the image.
+// - Recruiter-aware emphasis steered only by post type/structure.
+// - Mobile-safe text caps (headline/subheadline lengths) enforced here.
+//
 // ANTI-HALLUCINATION CONTRACT (carried from Phases 3–5D):
 // - Only text already present in the post/curriculum is used.
-// - Key points and technologies are extracted, never invented.
+// - Key points, technologies and concepts are extracted, never invented.
 // - Personal-experience framing is only applied when the post type supports it
 //   and the underlying evidence does. Course-only material stays educational.
 // - No statistics, job titles, companies, user counts, or performance numbers
 //   are ever synthesized.
+// - No internal quality scores, prompts, confidence values or reasoning are
+//   ever exposed.
 
 export interface BriefContext {
   readonly post: GeneratedPostRow;
@@ -34,6 +46,43 @@ export interface BriefContext {
   readonly moduleTitle: string;
   /** Post type from the linked content opportunity, when present. */
   readonly postType?: string | null;
+}
+
+// ─── Smart text extraction ───────────────────────────────────────────────────
+// Removes fragments that must never appear on the image: hashtags, emojis,
+// URLs, and generic motivational/filler wording.
+
+const FILLER_PHRASES = [
+  "today i",
+  "i learned",
+  "in this post",
+  "let me share",
+  "quick thread",
+  "thought i'd share",
+  "sharing my",
+];
+
+/** Strips emojis and other supplementary-plane symbols. */
+function stripEmojis(text: string): string {
+  return text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F300}-\u{1FAFF}\uFE0F]/gu, "");
+}
+
+/** Removes hashtags, URLs and markdown-ish fragments. */
+function scrubVisualFragments(text: string): string {
+  return text
+    .replace(/#[A-Za-z0-9_]+/g, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/@[A-Za-z0-9_.]+/g, "")
+    .replace(/[#*`_>](?=\s)/g, "");
+}
+
+/** Lower-cases and removes generic filler so it can't leak onto the visual. */
+function cleanVisualText(raw: string): string {
+  const stripped = stripEmojis(scrubVisualFragments(raw));
+  return FILLER_PHRASES.reduce(
+    (acc, phrase) => acc.replace(new RegExp(phrase, "gi"), " "),
+    stripped,
+  );
 }
 
 /** First sentence, capped. Used to build concise secondary text. */
@@ -48,9 +97,12 @@ function firstSentence(text: string): string {
 /** Key points derived deterministically from the post's own content. */
 function extractKeyPoints(post: GeneratedPostRow, topic: string, chainTitle?: string): VisualKeyPoint[] {
   const points: VisualKeyPoint[] = [];
+  const source = cleanVisualText(
+    `${post.image_visual_concept || ""} ${post.image_headline || ""} ${topic}`,
+  );
 
   // If a concept chain was found, present its nodes as the visual backbone.
-  const chain = findConceptChain(`${post.image_visual_concept || ""} ${post.image_headline || ""} ${topic}`);
+  const chain = findConceptChain(source);
   if (chain) {
     for (const p of chainToKeyPoints(chain)) points.push(p);
   }
@@ -64,8 +116,8 @@ function extractKeyPoints(post: GeneratedPostRow, topic: string, chainTitle?: st
 
   // Pull verified supporting phrases from the takeaway / next step.
   const candidate = [post.takeaway, post.next_step]
-    .map((t) => firstSentence(t))
-    .filter((t) => t && !t.includes(topicPoint.detail))
+    .map((t) => firstSentence(cleanVisualText(t)))
+    .filter((t) => t && t.toLowerCase().includes(" ") && !t.includes(topicPoint.detail))
     .slice(0, 2);
   for (const c of candidate) {
     points.push({ label: "Key Takeaway", detail: c });
@@ -88,7 +140,7 @@ function recruiterSignal(post: GeneratedPostRow, postType?: string | null): stri
 export function buildVisualBrief(ctx: BriefContext): VisualBrief {
   const { post, topic, moduleTitle, postType } = ctx;
 
-  const sourceText = [
+  const rawSource = [
     post.image_visual_concept || "",
     post.image_headline || "",
     post.opening,
@@ -97,7 +149,11 @@ export function buildVisualBrief(ctx: BriefContext): VisualBrief {
     topic,
   ].join(" ");
 
+  // Clean, filler-free text drives concept/technology extraction.
+  const sourceText = cleanVisualText(rawSource);
+
   const chain = findConceptChain(sourceText);
+  const priority = detectTopConcepts(sourceText, topic);
 
   const theme = selectTheme({
     postType,
@@ -115,19 +171,32 @@ export function buildVisualBrief(ctx: BriefContext): VisualBrief {
     text: sourceText,
   });
 
-  const headline = post.image_headline || chain?.title || truncate(topic, 40);
+  const emphasis = selectEmphasis({ postType, format: post.format, text: sourceText });
+
+  // Mobile-safe heading caps: headline ≤ 60, subheadline ≤ 100 (safe margins
+  // guarantee the rest of the layout stays inside the 1200×1200 canvas).
+  const headline = truncate(post.image_headline || chain?.title || priority.primary || topic, 60);
+  const subheadline = truncate(
+    post.image_subheadline || chain?.summary || firstSentence(cleanVisualText(post.takeaway)),
+    100,
+  );
 
   return {
     headline,
-    subheadline: post.image_subheadline || chain?.summary || firstSentence(post.takeaway),
-    concept: chain?.title || topic,
+    subheadline,
+    concept: chain?.title || priority.primary || topic,
     visualMetaphor: chain?.nodes.join(" → ") || topic,
+    primaryConcept: priority.primary,
+    secondaryConcepts: priority.secondary,
+    optionalContext: priority.optional,
     keyPoints,
     technologies: detectTechnologies(sourceText),
     recruiterSignal: recruiterSignal(post, postType),
     postType: postType ?? undefined,
+    postFormat: post.format,
     dayNumber: post.day_number,
     module: moduleTitle,
+    emphasis,
     theme,
     composition,
   };
