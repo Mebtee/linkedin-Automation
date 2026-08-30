@@ -1,82 +1,76 @@
 import { brand } from "@/config/brand";
 import { escapeXml } from "../../svg/escape";
 import { truncate } from "../themes";
+import {
+  drawNode as themeNode,
+  drawArrow as themeArrow,
+  drawCard as themeCard,
+  drawPill as themePill,
+} from "../../theme/primitives";
 
 const c = brand.colors;
 
-// ─── Shared drawing primitives for content compositions ────────────────────
-// Small, reusable SVG building blocks. All text is XML-escaped. Colors and
-// spacing stay consistent with the brand system.
+// ─── Composition drawing primitives (Phase 5I light editorial zone) ─────────
+// Thin adapters over the shared theme primitives so the content compositions
+// render in the same professional light-zone language as every template. Small
+// helpers that are specific to the content-driven compositions live here too.
 
 const FONT = "Arial, Helvetica, sans-serif";
 
-/** Wraps a label into lines that fit within a box of the given width. */
-function wrapLabel(label: string, maxWidth: number, fontSize: number): string[] {
-  const approx = fontSize * 0.6;
-  const maxChars = Math.max(4, Math.floor(maxWidth / approx));
-  const words = label.split(" ");
-  const lines: string[] = [];
-  let current = "";
-  for (const w of words) {
-    if ((current + " " + w).trim().length > maxChars) {
-      if (current) lines.push(current.trim());
-      current = w;
-    } else {
-      current = (current + " " + w).trim();
-    }
-  }
-  if (current) lines.push(current.trim());
-  return lines;
-}
-
-/** A rounded node box with an auto-wrapping label and optional sub text. */
+/** Light node panel. */
 export function drawNode(x: number, y: number, w: number, h: number, label: string, opts: { accent?: boolean; sub?: string } = {}): string {
-  const lines = wrapLabel(label, w - 20, 20);
-  const lineH = 24;
-  const blockTop = y + h / 2 - ((lines.length + (opts.sub ? 0 : 0)) * lineH) / 2;
-  const labelLines = lines.map((line, i) =>
-    `<text x="${x + w / 2}" y="${blockTop + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="20" font-weight="700" fill="white">${escapeXml(line)}</text>`
-  ).join("");
-  const sub = opts.sub ? `<text x="${x + w / 2}" y="${y + h - 18}" text-anchor="middle" font-family="${FONT}" font-size="14" font-weight="400" fill="${c.cyan}" opacity="0.9">${escapeXml(truncate(opts.sub, Math.max(10, Math.floor(w / 9))))}</text>` : "";
-  return `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14"
-          fill="${opts.accent ? c.blue : "#16233B"}" stroke="${c.cyan}" stroke-width="1.5" opacity="${opts.accent ? 0.95 : 0.85}" />
-    ${labelLines}
-    ${sub}`;
+  return themeNode(x, y, w, h, label, opts);
 }
 
-/** A horizontal arrow between two points. */
+/** Horizontal arrow (blue, light-zone). */
 export function drawArrow(x1: number, y1: number, x2: number, y2: number): string {
-  const head = 10;
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  const hx = Math.cos(angle) * head;
-  const hy = Math.sin(angle) * head;
-  return `
-    <line x1="${x1}" y1="${y1}" x2="${x2 - hx / 2}" y2="${y2 - hy / 2}" stroke="${c.cyan}" stroke-width="3" opacity="0.8" />
-    <polygon points="${x2},${y2} ${x2 - hx - hy * 0.35},${y2 - hy + hx * 0.35} ${x2 - hx + hy * 0.35},${y2 - hy - hx * 0.35}" fill="${c.cyan}" opacity="0.8" />`;
+  return themeArrow(x1, y1, x2, y2);
 }
 
-/** A key-point card with label + detail lines. */
+/** Light key-point card with a numbered chip. */
 export function drawCard(x: number, y: number, w: number, h: number, label: string, detail: string, index: number): string {
-  return `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12"
-          fill="#122040" stroke="${c.cyan}" stroke-width="1" opacity="0.7" />
-    <circle cx="${x + 28}" cy="${y + 30}" r="15" fill="${c.blue}" opacity="0.9" />
-    <text x="${x + 28}" y="${y + 36}" text-anchor="middle" font-family="${FONT}" font-size="16" font-weight="700" fill="white">${index + 1}</text>
-    <text x="${x + 50}" y="${y + 26}" font-family="${FONT}" font-size="18" font-weight="700" fill="white">${escapeXml(label)}</text>
-    ${detail ? `<text x="${x + 50}" y="${y + 50}" font-family="${FONT}" font-size="15" font-weight="400" fill="#C7D2E6">${escapeXml(truncate(detail, 34))}</text>` : ""}`;
+  return themeCard(x, y, w, h, label, detail, index);
 }
 
-/** A pill badge for a technology/label. */
+/** Light technology pill. */
 export function drawPill(x: number, y: number, label: string): string {
-  const w = Math.min(label.length * 11 + 36, 230);
-  return `
-    <rect x="${x - w / 2}" y="${y - 16}" width="${w}" height="32" rx="16"
-          fill="${c.blue}" opacity="0.3" stroke="${c.cyan}" stroke-width="0.75" />
-    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="14" font-weight="600" fill="${c.cyan}">${escapeXml(label)}</text>`;
+  return themePill(x, y, label);
 }
 
-/** Small day/module badge (secondary, journey branding only). */
+/** Centered multi-line headline (light zone, navy text). */
+export function drawHeadline(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 60), 940, 52, 2);
+  const lineH = 60;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="52" font-weight="800" fill="${c.text}">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Centered supporting line (light zone, muted). */
+export function drawSubheadline(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 100), 860, 22, 2);
+  const lineH = 28;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="22" font-weight="400" fill="${c.muted}">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Centered uppercase concept tag (light zone). */
+export function drawPrimaryTag(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const label = truncate(text.toUpperCase(), 34);
+  const w = Math.min(label.length * 12.5 + 44, 620);
+  return `
+    <rect x="${x - w / 2}" y="${y - 21}" width="${w}" height="42" rx="21"
+          fill="#EDF2FF" stroke="${c.blue}" stroke-width="1.2" />
+    <text x="${x}" y="${y + 7}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="700" letter-spacing="2.6" fill="${c.blue}">${escapeXml(label)}</text>`;
+}
+
+/** Small day/module badge (journey branding only). */
 export function drawDayBadge(x: number, y: number, dayNumber?: number, module?: string): string {
   const parts: string[] = [];
   if (dayNumber) parts.push(`DAY ${dayNumber} / 105`);
@@ -85,8 +79,43 @@ export function drawDayBadge(x: number, y: number, dayNumber?: number, module?: 
   if (!label) return "";
   return `
     <rect x="${x - 140}" y="${y - 20}" width="280" height="40" rx="20"
-          fill="none" stroke="${c.cyan}" stroke-width="1" opacity="0.5" />
-    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="600" letter-spacing="2" fill="${c.cyan}" opacity="0.9">${escapeXml(label)}</text>`;
+          fill="none" stroke="${c.blue}" stroke-width="1" opacity="0.4" />
+    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="600" letter-spacing="2" fill="${c.muted}">${escapeXml(label)}</text>`;
+}
+
+// ─── Left-anchored text helpers (light editorial zone) ──────────────────────
+
+/** Left-anchored uppercase concept tag. */
+export function drawPrimaryTagLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const label = truncate(text.toUpperCase(), 34);
+  const w = Math.min(label.length * 12.5 + 44, 620);
+  return `
+    <rect x="${x}" y="${y - 21}" width="${w}" height="42" rx="21"
+          fill="#EDF2FF" stroke="${c.blue}" stroke-width="1.2" />
+    <text x="${x + w / 2}" y="${y + 7}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="700" letter-spacing="2.6" fill="${c.blue}">${escapeXml(label)}</text>`;
+}
+
+/** Left-anchored headline, navy, wrapped to 2 lines. */
+export function drawHeadlineLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 60), 760, 52, 2);
+  const lineH = 60;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="52" font-weight="800" fill="${c.text}">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Left-anchored supporting line, muted, wrapped to 2 lines. */
+export function drawSubheadlineLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 100), 720, 20, 2);
+  const lineH = 26;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="20" font-weight="400" fill="${c.muted}">${escapeXml(line)}</text>`
+  ).join("");
 }
 
 /** Wraps text into centered lines that fit a max width at a given font size. */
@@ -106,76 +135,4 @@ function wrapCentered(text: string, maxWidth: number, fontSize: number, maxLines
   }
   if (current) lines.push(current.trim());
   return lines.slice(0, maxLines);
-}
-
-/** Medium uppercase section label (e.g. the concept headline). */
-export function drawHeadline(x: number, y: number, text: string): string {
-  if (!text) return "";
-  // Keep content well inside the safe margin on the wide 1200×630 canvas.
-  const lines = wrapCentered(truncate(text, 60), 1020, 42, 2);
-  const lineH = 46;
-  const start = y - ((lines.length - 1) * lineH) / 2;
-  return lines.map((line, i) =>
-    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="42" font-weight="800" fill="white">${escapeXml(line)}</text>`
-  ).join("");
-}
-
-/** Lighter subheadline line (wrapped to a safe 2 lines). */
-export function drawSubheadline(x: number, y: number, text: string): string {
-  if (!text) return "";
-  const lines = wrapCentered(truncate(text, 100), 1000, 20, 2);
-  const lineH = 26;
-  const start = y - ((lines.length - 1) * lineH) / 2;
-  return lines.map((line, i) =>
-    `<text x="${x}" y="${start + i * lineH}" text-anchor="middle" font-family="${FONT}" font-size="20" font-weight="400" fill="${c.cyan}" opacity="0.9">${escapeXml(line)}</text>`
-  ).join("");
-}
-
-/** Small Level-1 emphasis tag that frames the single dominant idea. */
-export function drawPrimaryTag(x: number, y: number, text: string): string {
-  if (!text) return "";
-  const label = truncate(text.toUpperCase(), 34);
-  const w = Math.min(label.length * 13 + 48, 620);
-  return `
-    <rect x="${x - w / 2}" y="${y - 22}" width="${w}" height="44" rx="22"
-          fill="${c.blue}" opacity="0.35" stroke="${c.cyan}" stroke-width="1.25" />
-    <text x="${x}" y="${y + 7}" text-anchor="middle" font-family="${FONT}" font-size="18" font-weight="700" letter-spacing="2" fill="${c.cyan}">${escapeXml(label)}</text>`;
-}
-
-// ─── Landscape (16:9) left-anchored text helpers ─────────────────────────────
-// The 1200×675 layout leads with a left-aligned header block so the concept reads
-// first; these anchor text to the left edge of the content zone instead of the
-// canvas center. Wrapping and truncation rules match the centered variants.
-
-/** Left-anchored uppercase concept tag (landscape header). */
-export function drawPrimaryTagLeft(x: number, y: number, text: string): string {
-  if (!text) return "";
-  const label = truncate(text.toUpperCase(), 34);
-  const w = Math.min(label.length * 13 + 48, 620);
-  return `
-    <rect x="${x}" y="${y - 20}" width="${w}" height="40" rx="20"
-          fill="${c.blue}" opacity="0.32" stroke="${c.cyan}" stroke-width="1.1" />
-    <text x="${x + w / 2}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="16" font-weight="700" letter-spacing="2" fill="${c.cyan}">${escapeXml(label)}</text>`;
-}
-
-/** Left-anchored headline, wrapped to a compact 2 lines on the landscape canvas. */
-export function drawHeadlineLeft(x: number, y: number, text: string): string {
-  if (!text) return "";
-  const lines = wrapCentered(truncate(text, 60), 640, 32, 2);
-  const lineH = 38;
-  const start = y - ((lines.length - 1) * lineH) / 2;
-  return lines.map((line, i) =>
-    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="32" font-weight="800" fill="white">${escapeXml(line)}</text>`
-  ).join("");
-}
-
-/** Left-anchored lighter subheadline, wrapped to a compact 2 lines. */
-export function drawSubheadlineLeft(x: number, y: number, text: string): string {
-  if (!text) return "";
-  const lines = wrapCentered(truncate(text, 100), 620, 17, 2);
-  const lineH = 22;
-  const start = y - ((lines.length - 1) * lineH) / 2;
-  return lines.map((line, i) =>
-    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="17" font-weight="400" fill="${c.cyan}" opacity="0.92">${escapeXml(line)}</text>`
-  ).join("");
 }

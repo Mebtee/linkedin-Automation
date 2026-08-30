@@ -1,40 +1,38 @@
 import type { ImageGenerationInput } from "@/types/image";
-import { brand } from "@/config/brand";
-import {
-  renderScaffold,
-  closeScaffold,
-  renderDayNumber,
-  renderTopic,
-  renderKeywords,
-} from "../render";
+import { renderScaffold, closeScaffold } from "../render";
+import type { LogoEmbed } from "../../logo";
+import { LIGHT_CX } from "../../theme/geometry";
+import { drawHeadline, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
 
-// ─── Template: CODE_VISUAL ──────────────────────────────────────────────────
-// Code-like visual blocks. Suitable for programming topics.
+// ─── Template: CODE_VISUAL ───────────────────────────────────────────────────
+// A clean pseudo-code panel (bars only — no invented code) under the headline.
+// Professional and abstract: grey "lines" with a blue/cyan accent bar.
 
-export function renderCodeVisual(input: ImageGenerationInput): string {
-  const c = brand.colors;
-  const cx = brand.image.width / 2;
-  const cy = brand.image.height / 2;
-
-  const codeBlocks = `
-    <g opacity="0.15">
-      <rect x="${cx - 350}" y="${cy - 180}" width="120" height="16" rx="4" fill="${c.cyan}" />
-      <rect x="${cx - 350}" y="${cy - 155}" width="200" height="16" rx="4" fill="white" />
-      <rect x="${cx - 350}" y="${cy - 130}" width="160" height="16" rx="4" fill="white" />
-      <rect x="${cx - 350}" y="${cy - 105}" width="180" height="16" rx="4" fill="${c.cyan}" />
-    </g>
-    <g opacity="0.15">
-      <rect x="${cx + 230}" y="${cy + 60}" width="120" height="16" rx="4" fill="${c.cyan}" />
-      <rect x="${cx + 230}" y="${cy + 85}" width="200" height="16" rx="4" fill="white" />
-      <rect x="${cx + 230}" y="${cy + 110}" width="160" height="16" rx="4" fill="white" />
-    </g>`;
+export function renderCodeVisual(input: ImageGenerationInput, logo: LogoEmbed | null): string {
+  const cx = LIGHT_CX;
+  const panel = { x: cx - 330, y: 420, w: 660, h: 150 };
+  const bars = [
+    { w: 380, accent: false },
+    { w: 300, accent: true },
+    { w: 340, accent: false },
+    { w: 240, accent: false },
+    { w: 300, accent: true },
+  ];
+  const barSvg = bars.map((b, i) => {
+    const bw = b.w * 0.6;
+    const bx = panel.x + 40;
+    const by = panel.y + 28 + i * 24;
+    const fill = b.accent ? "#1769FF" : "#D3DCEC";
+    return `<rect x="${bx}" y="${by}" width="${bw}" height="10" rx="3" fill="${fill}" opacity="${b.accent ? 0.9 : 0.8}" />`;
+  }).join("");
 
   const content = [
-    codeBlocks,
-    renderDayNumber(input.dayNumber),
-    renderTopic(input.headline || input.topic, cy + 160),
-    renderKeywords(input.keywords, cy + 220),
+    drawPrimaryTag(cx, 168, `DAY ${input.dayNumber} / 105`),
+    drawHeadline(cx, 262, input.headline || input.topic),
+    drawSubheadline(cx, 320, input.subheadline),
+    `<rect x="${panel.x}" y="${panel.y}" width="${panel.w}" height="${panel.h}" rx="16" fill="#F6F8FB" stroke="#DCE4F1" stroke-width="1" />`,
+    barSvg,
   ].join("");
 
-  return renderScaffold() + content + closeScaffold();
+  return renderScaffold(`code:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
 }

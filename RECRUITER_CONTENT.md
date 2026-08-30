@@ -362,11 +362,13 @@ full system; recruiter-relevant rules:
 
 ## Phase 5I — Landscape visual + engagement quality
 
-- Canvas is **1200×675 (16:9 landscape)** — LinkedIn's standard landscape feed
-  image; compact and readable on mobile. All 8 compositions re-laid out inside
-  ≥60px horizontal / ≥40px vertical safe margins, with a small skill signal
-  (e.g. "PROBLEM SOLVING") only when the content genuinely supports it. See
-  [IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1200675-169--post-visual--engagement-quality-upgrades).
+- Canvas is **1600×900 (16:9 landscape)** — LinkedIn's standard landscape feed
+  image; sharp and readable on mobile. All 8 compositions re-laid out inside the
+  light editorial zone of the professional personal-brand theme (≥80px horizontal
+  / ≥60px vertical safe margins, navy diagonal branding block + TB logo on the
+  right), with a small skill signal (e.g. "PROBLEM SOLVING") only when the content
+  genuinely supports it. See
+  [IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1600900-169--post-visual--engagement-quality-upgrades).
 - Published posts gain a **deterministic call-to-action** appended once at the
   end (`src/config/content.ts` → `content.cta`, selected by `selectCta()` in
   `src/services/linkedin/cta.ts`). The line is a genuine, low-pressure invite —

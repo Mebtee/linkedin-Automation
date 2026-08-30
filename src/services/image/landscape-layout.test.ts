@@ -10,11 +10,13 @@ import type { VisualBrief, VisualComposition } from "@/types/image";
 
 const W = brand.image.width;
 const H = brand.image.height;
+// Content zone left edge (≥80px horizontal safe margin on the light side).
+const LIGHT_LEFT = 100;
 
-// 16:9 aspect target used by the landscape layout.
+// 16:9 aspect target used by the landscape layout (1600×900 branded canvas).
 function expectLandscapeAspect(): void {
-  expect(W).toBe(1200);
-  expect(H).toBe(675);
+  expect(W).toBe(1600);
+  expect(H).toBe(900);
   expect(W / H).toBeCloseTo(16 / 9, 4);
 }
 
@@ -123,8 +125,8 @@ function textCoords(svg: string): { x: number[]; y: number[] } {
   return { x, y };
 }
 
-describe("landscape 1200×675 (16:9) canvas", () => {
-  it("exports brand image as 1200×675", () => {
+describe("landscape 1600×900 (16:9) branded canvas", () => {
+  it("exports brand image as 1600×900", () => {
     expectLandscapeAspect();
   });
 
@@ -138,13 +140,24 @@ describe("landscape 1200×675 (16:9) canvas", () => {
     }
   });
 
-  it("rasterizes to a 1200×675 PNG (16:9)", async () => {
+  it("rasterizes to a 1600×900 PNG (16:9)", async () => {
     const sharp = (await import("sharp")).default;
     const svg = renderVisualBrief(briefFor(FIXTURES[0]!.post, FIXTURES[0]!.topic, FIXTURES[0]!.postType));
     const png = await sharp(Buffer.from(svg)).png().toBuffer();
     const meta = await sharp(png).metadata();
-    expect(meta.width).toBe(1200);
-    expect(meta.height).toBe(675);
+    expect(meta.width).toBe(1600);
+    expect(meta.height).toBe(900);
+  });
+
+  it("paints the navy diagonal branding block and navy/white split", () => {
+    const svg = renderVisualBrief(briefFor(FIXTURES[0]!.post, FIXTURES[0]!.topic, FIXTURES[0]!.postType));
+    // Deep-navy gradient block wedges in from the right.
+    expect(svg).toContain("bgNavy");
+    expect(svg).toContain(brand.colors.navy);
+    expect(svg).toContain(brand.colors.blue);
+    expect(svg).toContain(brand.colors.cyan);
+    // The diagonal split polygon spans the full canvas height.
+    expect(svg).toMatch(/<path[\s\S]*?M 1600 0 L 1104 0 L 856 900 L 1600 900 Z/);
   });
 });
 
@@ -155,13 +168,15 @@ function wrapperAspect(svg: string): number {
 }
 
 describe("safe margins and no clipping", () => {
-  it("never places text in the outer horizontal gutters (≥60px margin)", () => {
+  it("never places text in the outer horizontal gutters (≥80px left, safe right)", () => {
     for (const f of FIXTURES) {
       const svg = renderVisualBrief(briefFor(f.post, f.topic, f.postType));
       const { x } = textCoords(svg);
       for (const xv of x) {
-        expect(xv, `${f.label}: text x=${xv}`).toBeGreaterThanOrEqual(60);
-        expect(xv, `${f.label}: text x=${xv}`).toBeLessThanOrEqual(1140);
+        // Content (light zone) and navy-region branding must both stay off the
+        // extreme left gutter (content starts at x=100) and off the right edge.
+        expect(xv, `${f.label}: text x=${xv}`).toBeGreaterThanOrEqual(LIGHT_LEFT);
+        expect(xv, `${f.label}: text x=${xv}`).toBeLessThanOrEqual(W - 40);
       }
     }
   });
@@ -201,7 +216,7 @@ describe("long content and wrapping", () => {
         "PROJECT_SHOWCASE",
       ),
     );
-    const headlineTexts = [...svg.matchAll(/font-size="32"[^>]*>([^<]*)</g)].map((m) => m[1]!);
+    const headlineTexts = [...svg.matchAll(/font-size="52"[^>]*>([^<]*)</g)].map((m) => m[1]!);
     expect(headlineTexts.length).toBeGreaterThanOrEqual(2);
     for (const text of headlineTexts) {
       expect(text.length).toBeLessThanOrEqual(34);
@@ -311,6 +326,53 @@ describe("determinism", () => {
       const b = renderVisualBrief(briefFor(f.post, f.topic, f.postType));
       expect(a, f.label).toBe(b);
     }
+  });
+});
+
+describe("branded theme details", () => {
+  it("draws the electric-blue diagonal accent line + thin cyan parallel line", () => {
+    const svg = renderVisualBrief(briefFor({}, "JavaScript Closures", "TECHNICAL_LESSON"));
+    expect(svg).toContain(brand.colors.blue);
+    expect(svg).toContain(brand.colors.cyan);
+    // 5px electric-blue diagonal accent (brand color) exists on the canvas.
+    expect(svg).toContain(`stroke="${brand.colors.blue}" stroke-width="5"`);
+    // A cyan parallel hairline follows it.
+    expect(svg).toContain(`stroke="${brand.colors.cyan}" stroke-width="1.4"`);
+  });
+
+  it("places the TB logo embed in the lower-right navy block at the spec size", async () => {
+    const { loadLogoEmbed } = await import("./logo");
+    const logo = await loadLogoEmbed();
+    expect(logo).not.toBeNull();
+    expect(logo!.width).toBe(200);
+    expect(logo!.height).toBe(200);
+    expect(logo!.aspect).toBe(1);
+    const svg = renderVisualBrief(briefFor({}, "JavaScript Closures", "TECHNICAL_LESSON"), logo);
+    // Logo sits inside the navy region, right of the diagonal and off the edge.
+    expect(svg).toContain('x="1280"');
+    expect(svg).toContain('y="624"');
+    expect(svg).toContain('width="200"');
+    expect(svg).toContain('height="200"');
+    expect(logo!.dataUri.startsWith("data:image/png;base64,")).toBe(true);
+    expect(checkSvgSafety(svg)).toBeNull();
+  });
+
+  it("renders deterministic output with the TB logo embed loaded", async () => {
+    const { loadLogoEmbed, resetLogoEmbedCache } = await import("./logo");
+    resetLogoEmbedCache();
+    const logo = await loadLogoEmbed();
+    const a = renderVisualBrief(briefFor({}, "JavaScript Closures", "TECHNICAL_LESSON"), logo);
+    const b = renderVisualBrief(briefFor({}, "JavaScript Closures", "TECHNICAL_LESSON"), logo);
+    expect(a).toBe(b);
+  });
+
+  it("fallback carrier SVG keeps the navy/white branded background and footer mark", () => {
+    const svg = generateFallbackSvg({ dayNumber: 1, topic: "Introduction" });
+    expect(svg).toContain(brand.colors.navy);
+    expect(svg).toContain(brand.colors.blue);
+    expect(svg).toContain("105 DLJ");
+    expect(svg).toContain("DAY 1 / 105");
+    expect(checkSvgSafety(svg)).toBeNull();
   });
 });
 

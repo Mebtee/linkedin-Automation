@@ -1,39 +1,29 @@
 import type { ImageGenerationInput } from "@/types/image";
 import { brand } from "@/config/brand";
-import {
-  renderScaffold,
-  closeScaffold,
-  renderDayNumber,
-  renderTopic,
-  renderKeywords,
-} from "../render";
+import { renderScaffold, closeScaffold } from "../render";
+import type { LogoEmbed } from "../../logo";
+import { LIGHT_CX } from "../../theme/geometry";
+import { drawHeadline, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
 
-// ─── Template: PROGRESS ─────────────────────────────────────────────────────
-// Strong day number. Progress visual bar. Same brand system.
+// ─── Template: PROGRESS ──────────────────────────────────────────────────────
+// Editorial progress: headline + supporting line + a clean progress bar showing
+// journey completion. Percent is derived deterministically from the day number.
 
-export function renderProgress(input: ImageGenerationInput): string {
-  const c = brand.colors;
-  const cx = brand.image.width / 2;
-  const cy = brand.image.height / 2;
+export function renderProgress(input: ImageGenerationInput, logo: LogoEmbed | null): string {
+  const cx = LIGHT_CX;
   const progressPercent = (input.dayNumber / brand.totalDays) * 100;
-
-  const progressBar = `
-    <rect x="${cx - 300}" y="${cy + 130}" width="600" height="12" rx="6"
-          fill="white" opacity="0.1" />
-    <rect x="${cx - 300}" y="${cy + 130}" width="${600 * (progressPercent / 100)}"
-          height="12" rx="6" fill="${c.cyan}" opacity="0.8" />
-    <text x="${cx + 320}" y="${cy + 142}" text-anchor="start"
-          font-family="Arial, Helvetica, sans-serif" font-size="14"
-          font-weight="500" fill="${c.cyan}" opacity="0.8">
-      ${Math.round(progressPercent)}%
-    </text>`;
+  const bar = { x: cx - 320, y: 470, w: 640, h: 14 };
+  const fillW = bar.w * (progressPercent / 100);
 
   const content = [
-    renderDayNumber(input.dayNumber),
-    progressBar,
-    renderTopic(input.headline || input.topic, cy + 190),
-    renderKeywords(input.keywords, cy + 250),
+    drawPrimaryTag(cx, 168, `DAY ${input.dayNumber} / ${brand.totalDays}`),
+    drawHeadline(cx, 256, input.headline || input.topic),
+    drawSubheadline(cx, 318, input.subheadline),
+    `<rect x="${bar.x}" y="${bar.y}" width="${bar.w}" height="${bar.h}" rx="7" fill="#E7ECF4" />`,
+    `<rect x="${bar.x}" y="${bar.y}" width="${Number(fillW.toFixed(1))}" height="${bar.h}" rx="7" fill="${brand.colors.blue}" opacity="0.9" />`,
+    `<text x="${bar.x + bar.w + 14}" y="${bar.y + (bar.h / 2) + 5}" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="${brand.colors.blue}">${Math.round(progressPercent)}%</text>`,
+    `<text x="${bar.x}" y="${bar.y - 14}" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">JOURNEY PROGRESS</text>`,
   ].join("");
 
-  return renderScaffold() + content + closeScaffold();
+  return renderScaffold(`progress:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
 }

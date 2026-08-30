@@ -1,44 +1,42 @@
 import type { ImageGenerationInput } from "@/types/image";
-import { brand } from "@/config/brand";
+import { renderScaffold, closeScaffold } from "../render";
+import type { LogoEmbed } from "../../logo";
+import { LIGHT_CX } from "../../theme/geometry";
 import {
-  renderScaffold,
-  closeScaffold,
-  renderDayNumber,
-  renderTopic,
-  renderKeywords,
-} from "../render";
+  drawArrow,
+  drawHeadline,
+  drawNode,
+  drawPrimaryTag,
+  drawSubheadline,
+} from "../../theme/primitives";
 
-// ─── Template: CONCEPT_DIAGRAM ──────────────────────────────────────────────
-// Simple geometric shapes and connectors for concept-heavy topics.
+// ─── Template: CONCEPT_DIAGRAM ───────────────────────────────────────────────
+// A simple technical relationship: three connected nodes. Labels come from the
+// post keywords when present; otherwise the diagram is intentionally generic
+// (CONCEPT / CONNECTION / RESULT) and never invents technical claims.
 
-export function renderConceptDiagram(input: ImageGenerationInput): string {
-  const c = brand.colors;
-  const cx = brand.image.width / 2;
-  const cy = brand.image.height / 2;
+export function renderConceptDiagram(input: ImageGenerationInput, logo: LogoEmbed | null): string {
+  const cx = LIGHT_CX;
+  const labels = input.keywords.slice(0, 3);
+  const nodes = labels.length === 3 ? labels : ["CONCEPT", "CONNECTION", "RESULT"];
+  const panel = { w: 210, h: 116, y: 430 };
+  const gap = 62;
+  const totalW = 3 * panel.w + 2 * gap;
+  const startX = cx - totalW / 2;
 
-  const diagram = `
-    <g opacity="0.2">
-      <rect x="${cx - 200}" y="${cy - 200}" width="100" height="100" rx="12"
-            fill="none" stroke="${c.cyan}" stroke-width="2" />
-      <rect x="${cx + 100}" y="${cy - 200}" width="100" height="100" rx="12"
-            fill="none" stroke="${c.cyan}" stroke-width="2" />
-      <rect x="${cx - 50}" y="${cy - 60}" width="100" height="100" rx="12"
-            fill="none" stroke="${c.cyan}" stroke-width="2" />
-      <line x1="${cx - 100}" y1="${cy - 100}" x2="${cx}" y2="${cy - 60}"
-            stroke="${c.cyan}" stroke-width="1.5" />
-      <line x1="${cx + 100}" y1="${cy - 100}" x2="${cx}" y2="${cy - 60}"
-            stroke="${c.cyan}" stroke-width="1.5" />
-      <circle cx="${cx - 150}" cy="${cy - 150}" r="8" fill="${c.cyan}" />
-      <circle cx="${cx + 150}" cy="${cy - 150}" r="8" fill="${c.cyan}" />
-      <circle cx="${cx}" cy="${cy - 10}" r="8" fill="${c.cyan}" />
-    </g>`;
+  const cols = nodes.map((label, i) => {
+    const x = startX + i * (panel.w + gap);
+    const node = drawNode(x, panel.y, panel.w, panel.h, label, { accent: i === 1 });
+    const arrow = i < 2 ? drawArrow(x + panel.w + 6, panel.y + panel.h / 2, x + panel.w + gap - 6, panel.y + panel.h / 2) : "";
+    return node + arrow;
+  }).join("");
 
   const content = [
-    diagram,
-    renderDayNumber(input.dayNumber),
-    renderTopic(input.headline || input.topic, cy + 170),
-    renderKeywords(input.keywords, cy + 230),
+    drawPrimaryTag(cx, 168, `DAY ${input.dayNumber} / 105`),
+    drawHeadline(cx, 262, input.headline || input.topic),
+    drawSubheadline(cx, 320, input.subheadline),
+    cols,
   ].join("");
 
-  return renderScaffold() + content + closeScaffold();
+  return renderScaffold(`diagram:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
 }

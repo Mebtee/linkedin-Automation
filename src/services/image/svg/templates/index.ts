@@ -1,4 +1,5 @@
 import type { ImageGenerationInput, ImageTemplate } from "@/types/image";
+import type { LogoEmbed } from "../../logo";
 import { renderLargeNumber } from "./large-number";
 import { renderCodeVisual } from "./code-visual";
 import { renderConceptDiagram } from "./concept-diagram";
@@ -7,9 +8,12 @@ import { renderProgress } from "./progress";
 import { renderFinalMilestone } from "./final-milestone";
 
 // ─── Template Registry ──────────────────────────────────────────────────────
-// Maps each template ID to its renderer function.
+// Maps each template ID to its renderer function. The TB logo embed is threaded
+// through so every template paints the personal-brand signature.
 
-const templateRenderers: Record<ImageTemplate, (input: ImageGenerationInput) => string> = {
+type TemplateRenderer = (input: ImageGenerationInput, logo: LogoEmbed | null) => string;
+
+const templateRenderers: Record<ImageTemplate, TemplateRenderer> = {
   "large-number": renderLargeNumber,
   "code-visual": renderCodeVisual,
   "concept-diagram": renderConceptDiagram,
@@ -24,7 +28,8 @@ const templateRenderers: Record<ImageTemplate, (input: ImageGenerationInput) => 
 export function renderTemplate(
   template: ImageTemplate,
   input: ImageGenerationInput,
+  logo: LogoEmbed | null = null,
 ): string {
   const renderer = templateRenderers[template];
-  return renderer(input);
+  return renderer(input, logo);
 }

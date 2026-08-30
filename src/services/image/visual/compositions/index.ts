@@ -1,89 +1,148 @@
 import type { VisualBrief, VisualComposition, VisualKeyPoint } from "@/types/image";
 import { brand } from "@/config/brand";
-import { renderScaffold } from "../../svg/render";
+import { renderScaffold, closeScaffold } from "../../svg/render";
 import { escapeXml } from "../../svg/escape";
+import type { LogoEmbed } from "../../logo";
+import { LIGHT_LEFT, LIGHT_RIGHT, LIGHT_CX } from "../../theme/geometry";
+import {
+  drawDayFeather,
+  drawSignalTag,
+} from "../../theme/primitives";
 import {
   drawNode,
   drawArrow,
   drawCard,
   drawPill,
-  drawDayBadge,
   drawHeadlineLeft,
   drawSubheadlineLeft,
   drawPrimaryTagLeft,
 } from "./draw";
 import { clampKeyPoints } from "../themes";
 
-// ─── Landscape canvas (`brand.image` = 1200×675, LinkedIn 16:9 feed ratio) ───
-// A compact, professional landscape layout. Horizontal hierarchy:
-//   LEFT   → concept tag + headline + subheadline (reads first)
-//   CENTER → the main technical visual (concept chain / nodes / cards/flow)
-//   RIGHT  → supporting concepts/technologies + a small recruiter-relevant
-//            signal when genuinely supported
-// A thin secondary band (technologies / supporting key points) sits beneath the
-// main visual; the day/module badge anchors the bottom. Every coordinate derives
-// from the canvas dims. Safe area: ≥60px horizontal, ≥40px vertical.
+// ─── Landscape canvas (`brand.image` = 1600×900, LinkedIn 16:9 feed ratio) ───
+// A professional personal-brand editorial layout (Phase 5I). The branded
+// background splits the canvas diagonally into a white content zone (left) and a
+// navy branding zone (right). All content lives in the light zone:
+//
+//   x ∈ [LIGHT_LEFT, LIGHT_RIGHT] = [100, 940]   (≥80px horizontal safe margin)
+//   TOP      → concept tag + headline + subheadline (reads first), left-aligned
+//   MIDDLE   → the main technical visual (concept / nodes / cards / flow)
+//   BOTTOM   → day badge / footer mark (light zone)
+//   NAVY     → TB logo (lower-right) + optional skill signal (top-right)
 //
 // Text density is deliberately low: the image is a visual SUMMARY of the post —
 // one main concept, a small number of supporting points, tags. The detailed
-// explanation lives in the LinkedIn caption.
+// explanation lives in the LinkedIn caption. Every coordinate derives from the
+// theme geometry constants; nothing hard-codes a raw pixel.
 
-const W = brand.image.width;
 const H = brand.image.height;
-const Cx = W / 2;
 
-const EDGE = 70;           // left content x (≥60px horizontal safe margin)
-const RIGHT_EDGE = 1140;   // right content boundary (≤ 1200-60)
-const TAG_Y = 112;
-const HEAD_Y = 172;
-const SUB_Y = 238;
-const ACCENT_Y = 266;
-const PILLS_Y = 505;
+const HEAD_X = LIGHT_LEFT;
+const TAG_Y = 128;
+const HEAD_Y = 236;
+const SUB_Y = 302;
+const ACCENT_Y = 336;
+const VISUAL_Y = 368;
 const FOOTER_Y = H - 64;
+const PILLS_Y = 640;
 
-/** Technologies pills — a compact secondary band under the main visual. */
+const VISUAL_MAX_X = LIGHT_RIGHT - 80;
+
+/** Technology pills band, centered in the light zone. */
 function fitPills(technologies: readonly string[], y: number): string {
   const pills = technologies.slice(0, 4);
   if (!pills.length) return "";
-  const total = pills.length * 160 + (pills.length - 1) * 16;
-  let x = Cx - total / 2 + 80;
-  return pills.map((t) => {
-    const out = drawPill(x, y, t);
-    x += 176;
+  const widths = pills.map((t) => Math.min(t.length * 11 + 44, 220));
+  const total = widths.reduce((a, b) => a + b, 0) + (pills.length - 1) * 16;
+  let x = LIGHT_CX - total / 2;
+  return pills.map((t, i) => {
+    const out = drawPill(x + widths[i]! / 2, y, t);
+    x += widths[i]! + 16;
     return out;
   }).join("");
 }
 
-/**
- * Left-aligned header block: concept tag → headline → subheadline → accent rule.
- * Anchored left so the main concept is the first thing a viewer reads.
- */
+/** Left-aligned header block: concept tag → headline → subheadline → accent rule. */
 function header(brief: VisualBrief): string {
   return [
-    drawPrimaryTagLeft(EDGE, TAG_Y, brief.primaryConcept || ""),
-    drawHeadlineLeft(EDGE, HEAD_Y, brief.headline || brief.concept),
-    drawSubheadlineLeft(EDGE, SUB_Y, brief.subheadline),
-    `<line x1="${EDGE}" y1="${ACCENT_Y}" x2="${EDGE + 240}" y2="${ACCENT_Y}" stroke="${brand.colors.blue}" stroke-width="3" stroke-linecap="round" opacity="0.55" />`,
+    drawPrimaryTagLeft(HEAD_X, TAG_Y, brief.primaryConcept || ""),
+    drawHeadlineLeft(HEAD_X, HEAD_Y, brief.headline || brief.concept),
+    drawSubheadlineLeft(HEAD_X, SUB_Y, brief.subheadline),
+    `<line x1="${HEAD_X}" y1="${ACCENT_Y}" x2="${HEAD_X + 240}" y2="${ACCENT_Y}" stroke="${brand.colors.blue}" stroke-width="3" stroke-linecap="round" opacity="0.55" />`,
   ].join("");
 }
 
-/**
- * Small, subtle recruiter-relevant signal in the top-right corner. Rendered only
- * when the content genuinely supports it (Phase 5H flags). It states a skill
- * ("PROBLEM SOLVING", "SECURITY AWARENESS") — never a hiring message.
- */
+/** Small recruiter-relevant skill signal in the top-right navy area (spec §8). */
 function signalTag(brief: VisualBrief): string {
-  if (!brief.recruiterSignal) return "";
-  return `
-    <text x="${RIGHT_EDGE}" y="118" text-anchor="end"
-          font-family="Arial, Helvetica, sans-serif" font-size="15"
-          font-weight="600" letter-spacing="2" fill="${brand.colors.cyan}" opacity="0.85">
-      ${escapeXml(brief.recruiterSignal.toUpperCase())}
-    </text>`;
+  return drawSignalTag(brief.recruiterSignal || undefined);
+}
+
+/** Day feather at the top-right of the light zone. */
+function dayFeather(brief: VisualBrief): string {
+  return drawDayFeather(LIGHT_RIGHT - 20, TAG_Y, brief.dayNumber);
 }
 
 function footerBadge(brief: VisualBrief): string {
-  return drawDayBadge(Cx, FOOTER_Y, brief.dayNumber, brief.module);
+  return drawDayBadgeCd(LIGHT_CX, FOOTER_Y, brief.dayNumber, brief.module);
+}
+
+function drawDayBadgeCd(x: number, y: number, dayNumber?: number, module?: string): string {
+  const parts: string[] = [];
+  if (dayNumber) parts.push(`DAY ${dayNumber} / 105`);
+  if (module) parts.push(module.toUpperCase());
+  const label = parts.join("  ·  ");
+  if (!label) return "";
+  return `
+    <rect x="${x - 140}" y="${y - 20}" width="280" height="40" rx="20"
+          fill="none" stroke="${brand.colors.blue}" stroke-width="1" opacity="0.4" />
+    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(label)}</text>`;
+}
+
+/** Horizontal chain of nodes connected by left→right arrows, centered in zone. */
+function chainRowCentered(
+  nodes: readonly string[],
+  y: number,
+  boxH: number,
+  gap: number,
+  boxW?: number,
+): string {
+  const shown = nodes.slice(0, 4);
+  const n = shown.length;
+  if (!n) return "";
+  const bw = boxW ?? Math.min(200, (VISUAL_MAX_X - LIGHT_LEFT) / n);
+  const totalW = n * bw + (n - 1) * gap;
+  const startX = LIGHT_CX - totalW / 2;
+  // Ensure the row starts within the light zone.
+  const safeStart = Math.max(LIGHT_LEFT, startX);
+  let svg = "";
+  shown.forEach((label, i) => {
+    const x = safeStart + i * (bw + gap);
+    const lines = nodeLines(label);
+    svg += drawNode(x, y, bw, boxH, lines[0] || "", {
+      accent: i === n - 1,
+      sub: lines[1],
+    });
+    if (i < n - 1) {
+      svg += drawArrow(x + bw + 2, y + boxH / 2, x + bw + gap - 2, y + boxH / 2);
+    }
+  });
+  return svg;
+}
+
+/** Horizontal row of cards centered in the light zone. */
+function cardRowCentered(
+  points: readonly VisualKeyPoint[],
+  y: number,
+  w: number,
+  h: number,
+  gap: number,
+): string {
+  const shown = points.slice(0, 4);
+  const n = shown.length;
+  if (!n) return "";
+  const totalW = n * w + (n - 1) * gap;
+  const startX = Math.max(LIGHT_LEFT, LIGHT_CX - totalW / 2);
+  return shown.map((p, i) => drawCard(startX + i * (w + gap), y, w, h, p.label || " ", p.detail, i)).join("");
 }
 
 /** Word-wrap a long label into lines for a node. */
@@ -104,85 +163,47 @@ function nodeLines(label: string): string[] {
   return lines;
 }
 
-/** Horizontal chain of nodes connected by left→right arrows (landscape). */
-function chainRow(nodes: readonly string[], y: number, boxH: number, gap: number): string {
-  const shown = nodes.slice(0, 4);
-  const n = shown.length;
-  if (!n) return "";
-  const boxW = Math.min(220, (W - 260) / n);
-  const totalW = n * boxW + (n - 1) * gap;
-  const startX = Cx - totalW / 2;
-  let svg = "";
-  shown.forEach((label, i) => {
-    const lines = nodeLines(label);
-    const x = startX + i * (boxW + gap);
-    svg += drawNode(x, y, boxW, boxH, lines[0] || "", {
-      accent: i === n - 1,
-      sub: lines[1],
-    });
-    if (i < n - 1) {
-      svg += drawArrow(x + boxW + 2, y + boxH / 2, x + boxW + gap - 2, y + boxH / 2);
-    }
-  });
-  return svg;
-}
-
-/** Horizontal row of cards (used for descriptive key points). */
-function cardRow(points: readonly VisualKeyPoint[], y: number, w: number, h: number, gap: number): string {
-  const shown = points.slice(0, 4);
-  const n = shown.length;
-  if (!n) return "";
-  const totalW = n * w + (n - 1) * gap;
-  const startX = Cx - totalW / 2;
-  return shown.map((p, i) => drawCard(startX + i * (w + gap), y, w, h, p.label || " ", p.detail, i)).join("");
-}
-
 // ─── Composition: CONCEPT_FLOW ──────────────────────────────────────────────
-// Left header + a main horizontal chain of concept nodes + technology band.
-
 function renderConceptFlow(brief: VisualBrief): string {
   const chain = brief.visualMetaphor.split(" → ").map((s) => s.trim()).filter(Boolean);
   const nodes = chain.length >= 2 ? chain : brief.keyPoints.map((p) => p.label);
-
   return [
     header(brief),
     signalTag(brief),
-    chainRow(nodes, 302, 112, 40),
+    dayFeather(brief),
+    chainRowCentered(nodes, VISUAL_Y, 108, 32),
     fitPills(brief.technologies, PILLS_Y),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: PROBLEM_SOLUTION ──────────────────────────────────────────
-// Three aligned columns — PROBLEM → SOLUTION → RESULT — with a supporting card
-// beneath, laid out for the landscape canvas.
-
 function renderProblemSolution(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
-  const boxW = 300;
-  const boxH = 112;
-  const y = 300;
-  const leftX = 90;
-  const rightX = W - 90 - boxW;
-  const midX = Cx - boxW / 2;
-  const gap = midX - (leftX + boxW);
+  const boxW = 200;
+  const boxH = 96;
+  const y = VISUAL_Y;
+  const gap = 26;
+  const totalW = 3 * boxW + 2 * gap;
+  const startX = LIGHT_CX - totalW / 2;
 
-  const columns: Array<[number, string, string]> = [
-    [leftX, "PROBLEM", points[0]?.label || brief.concept],
-    [midX, "SOLUTION", points[1]?.label || ""],
-    [rightX, "RESULT", points[2]?.label || ""],
-  ];
-
-  const boxes = columns.map(([x, cap, sub]) => drawNode(x, y, boxW, boxH, cap, { accent: cap === "SOLUTION", sub })).join("");
+  const captions = ["PROBLEM", "SOLUTION", "RESULT"];
+  const boxes = captions.map((cap, i) =>
+    drawNode(startX + i * (boxW + gap), y, boxW, boxH, cap, {
+      accent: cap === "SOLUTION",
+      sub: points[i]?.label || "",
+    }),
+  ).join("");
   const arrows =
-    drawArrow(leftX + boxW + 6, y + boxH / 2, leftX + boxW + gap - 6, y + boxH / 2) +
-    drawArrow(midX + boxW + 6, y + boxH / 2, midX + boxW + gap - 6, y + boxH / 2);
+    drawArrow(startX + boxW + 2, y + boxH / 2, startX + boxW + gap - 2, y + boxH / 2) +
+    drawArrow(startX + (boxW + gap) * 2 + 2, y + boxH / 2, startX + (boxW + gap) * 2 + gap - 2, y + boxH / 2);
 
-  const cards = cardRow(points, 440, boxW, 64, gap);
+  const cards = cardRowCentered(points, y + boxH + 34, 180, 56, 24);
 
   return [
     header(brief),
     signalTag(brief),
+    dayFeather(brief),
     boxes,
     arrows,
     cards,
@@ -191,22 +212,23 @@ function renderProblemSolution(brief: VisualBrief): string {
 }
 
 // ─── Composition: THREE_IDEAS ───────────────────────────────────────────────
-// Left header + three descriptive idea cards across the width + technology band.
-
 function renderThreeIdeas(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
-  const w = 340;
-  const gap = 16;
-  const y = 285;
-  const h = 148;
+  const w = 240;
+  const gap = 18;
+  const y = VISUAL_Y;
+  const h = 150;
 
+  const totalW = 3 * w + 2 * gap;
+  const startX = LIGHT_CX - totalW / 2;
   const cards = points.map((p, i) =>
-    drawCard(Cx - (3 * w + 2 * gap) / 2 + i * (w + gap), y, w, h, p.label || " ", p.detail, i),
+    drawCard(startX + i * (w + gap), y, w, h, p.label || " ", p.detail, i),
   ).join("");
 
   return [
     header(brief),
     signalTag(brief),
+    dayFeather(brief),
     cards,
     fitPills(brief.technologies, PILLS_Y),
     footerBadge(brief),
@@ -214,35 +236,32 @@ function renderThreeIdeas(brief: VisualBrief): string {
 }
 
 // ─── Composition: ARCHITECTURE_FLOW ─────────────────────────────────────────
-// Layered system tiers shown as a main horizontal pipeline + technology band.
-
 function renderArchitectureFlow(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 4);
   const nodes = points.length ? points.map((p) => p.label) : [brief.concept || "System", "", "", ""];
-
   return [
     header(brief),
     signalTag(brief),
-    chainRow(nodes, 302, 112, 40),
+    dayFeather(brief),
+    chainRowCentered(nodes, VISUAL_Y, 108, 32),
     fitPills(brief.technologies, PILLS_Y),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: BEFORE_AFTER ──────────────────────────────────────────────
-// Side-by-side before / after contrast with a connecting arrow.
-
 function renderBeforeAfter(brief: VisualBrief): string {
   const contrastParts = brief.visualMetaphor.split(" → ").map((s) => s.trim()).filter(Boolean);
   const contrast: [string, string] = contrastParts.length >= 2
     ? [contrastParts[0]!, contrastParts[contrastParts.length - 1]!]
     : ["BEFORE", "AFTER"];
   const points = clampKeyPoints(brief.keyPoints, 2);
-  const boxW = 400;
-  const boxH = 180;
-  const y = 290;
-  const leftX = 110;
-  const rightX = W - 110 - boxW;
+  const boxW = 280;
+  const boxH = 140;
+  const y = VISUAL_Y;
+  const gap = 40;
+  const totalW = 2 * boxW + gap;
+  const startX = LIGHT_CX - totalW / 2;
 
   const leftDetail = points[0]?.detail || "";
   const rightDetail = points[1]?.detail || brief.visualMetaphor;
@@ -250,77 +269,74 @@ function renderBeforeAfter(brief: VisualBrief): string {
   return [
     header(brief),
     signalTag(brief),
-    drawNode(leftX, y, boxW, boxH, contrast[0], { sub: leftDetail }),
-    drawArrow(leftX + boxW + 14, y + boxH / 2, rightX - 14, y + boxH / 2),
-    drawNode(rightX, y, boxW, boxH, contrast[1], { accent: true, sub: rightDetail }),
+    dayFeather(brief),
+    drawNode(startX, y, boxW, boxH, contrast[0], { sub: leftDetail }),
+    drawArrow(startX + boxW + 6, y + boxH / 2, startX + boxW + gap - 6, y + boxH / 2),
+    drawNode(startX + boxW + gap, y, boxW, boxH, contrast[1], { accent: true, sub: rightDetail }),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: SKILL_PROGRESSION ─────────────────────────────────────────
-// Progression steps as a main chain, with a supporting compact card row.
-
 function renderSkillProgression(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 4);
   const nodes = points.length ? points.map((p) => p.label) : [brief.concept || "Learn", "", "", ""];
-
   return [
     header(brief),
     signalTag(brief),
-    chainRow(nodes, 296, 100, 40),
-    cardRow(points, 435, 250, 62, 24),
+    dayFeather(brief),
+    chainRowCentered(nodes, VISUAL_Y, 96, 30),
+    cardRowCentered(points, VISUAL_Y + 122, 210, 60, 20),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: COMPARISON ────────────────────────────────────────────────
-// Two-column comparison of two concepts/approaches.
-
 function renderComparison(brief: VisualBrief): string {
   const parts = brief.visualMetaphor.split(" → ").map((s) => s.trim()).filter(Boolean);
   const left = parts[0] || "A";
   const right = (parts.length > 1 ? parts[1] : undefined) || "B";
   const points = clampKeyPoints(brief.keyPoints, 2);
-  const boxW = 460;
-  const boxH = 178;
-  const y = 290;
-  const leftX = 110;
-  const rightX = W - 110 - boxW;
+  const boxW = 300;
+  const boxH = 140;
+  const y = VISUAL_Y;
+  const gap = 36;
+  const totalW = 2 * boxW + gap;
+  const startX = LIGHT_CX - totalW / 2;
   const midY = y + boxH / 2;
 
   return [
     header(brief),
     signalTag(brief),
-    drawNode(leftX, y, boxW, boxH, left, { sub: points[0]?.detail || "" }),
-    drawArrow(leftX + boxW + 10, midY, rightX - 10, midY),
-    drawNode(rightX, y, boxW, boxH, right, { accent: true, sub: points[1]?.detail || brief.concept }),
+    dayFeather(brief),
+    drawNode(startX, y, boxW, boxH, left, { sub: points[0]?.detail || "" }),
+    drawArrow(startX + boxW + 8, midY, startX + boxW + gap - 8, midY),
+    drawNode(startX + boxW + gap, y, boxW, boxH, right, { accent: true, sub: points[1]?.detail || brief.concept }),
     footerBadge(brief),
   ].join("");
 }
 
 // ─── Composition: INPUT_PROCESS_OUTPUT ──────────────────────────────────────
-// Three horizontal stages: INPUT → PROCESS → OUTPUT (kept minimal for the
-// compact landscape — no redundant second card row).
-
 function renderInputProcessOutput(brief: VisualBrief): string {
   const points = clampKeyPoints(brief.keyPoints, 3);
   const captions = ["INPUT", "PROCESS", "OUTPUT"];
-  const boxW = 280;
-  const boxH = 112;
-  const gap = 66;
+  const boxW = 180;
+  const boxH = 96;
+  const gap = 30;
   const totalW = 3 * boxW + 2 * gap;
-  const startX = Cx - totalW / 2;
-  const y = 300;
+  const startX = LIGHT_CX - totalW / 2;
+  const y = VISUAL_Y;
   const stageAccents = [false, true, false];
 
   let svg = header(brief);
   svg += signalTag(brief);
+  svg += dayFeather(brief);
   captions.forEach((caption, i) => {
     const x = startX + i * (boxW + gap);
-    svg += `<text x="${x + boxW / 2}" y="${y - 26}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="${brand.colors.cyan}">${caption}</text>`;
+    svg += `<text x="${x + boxW / 2}" y="${y - 24}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(caption)}</text>`;
     svg += drawNode(x, y, boxW, boxH, points[i]?.label || caption, { accent: stageAccents[i], sub: points[i]?.detail });
     if (i < 2) {
-      svg += drawArrow(x + boxW + 6, y + boxH / 2, x + boxW + gap - 6, y + boxH / 2);
+      svg += drawArrow(x + boxW + 4, y + boxH / 2, x + boxW + gap - 4, y + boxH / 2);
     }
   });
 
@@ -328,7 +344,7 @@ function renderInputProcessOutput(brief: VisualBrief): string {
   return svg;
 }
 
-// ─── Dispatcher ──────────────────────────────────────────────────────────────
+// ─── Dispatcher ─────────────────────────────────────────────────────────────
 
 const RENDERERS: Record<VisualComposition, (b: VisualBrief) => string> = {
   "concept-flow": renderConceptFlow,
@@ -343,13 +359,13 @@ const RENDERERS: Record<VisualComposition, (b: VisualBrief) => string> = {
 
 /**
  * Renders a full branded SVG for a VisualBrief using its chosen composition.
- * Canvas is the landscape `brand.image` (1200×675); purely programmatic,
+ * Canvas is the landscape `brand.image` (1600×900); purely programmatic,
  * deterministic, and limited to the brand palette.
  */
-export function renderVisualBrief(brief: VisualBrief): string {
+export function renderVisualBrief(brief: VisualBrief, logo: LogoEmbed | null = null): string {
   const renderer = RENDERERS[brief.composition] ?? renderConceptFlow;
   const content = renderer(brief);
-  // Compositions carry their own bottom day/module badge, so the shared
-  // scaffold footer mark is omitted here to avoid a redundant mark stacking.
-  return renderScaffold() + content + "</svg>";
+  // The shared scaffold opens the branded background and closes with the
+  // branding layer (TB logo + footer mark).
+  return renderScaffold(`brief:${brief.composition}:${brief.concept}`) + content + closeScaffold(logo);
 }

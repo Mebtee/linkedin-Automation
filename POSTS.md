@@ -410,11 +410,12 @@ composition and a recruiter-aware emphasis, and validates the brief for
 unsupported claims before rendering. Regenerating an image reflects the current
 (saved) post content. See [IMAGE_GENERATION.md](IMAGE_GENERATION.md#visual-brief-system-phase-5g--5h).
 
-Since Phase 5I images are **landscape 1200×675 (16:9)**: the brand canvas is the
-single source of truth for the SVG `viewBox`/size and the rasterized PNG, and
-every composition is laid out for the landscape feed (left concept header,
-centered main visual, bottom secondary band, safe 60/40px margins). See
-[IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1200675-169--post-visual--engagement-quality-upgrades).
+Since Phase 5I images are **landscape 1600×900 (16:9)** in the professional
+personal-brand theme: the brand canvas is the single source of truth for the SVG
+`viewBox`/size and the rasterized PNG, and every composition is laid out for the
+light editorial zone (left concept header, centered main visual, bottom secondary
+band, safe 80/60px margins, navy diagonal branding block + TB logo on the right).
+See [IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1600900-169--post-visual--engagement-quality-upgrades).
 
 The **published text structure** is:
 `opening → body → takeaway → portfolio link → CTA → hashtags`. The

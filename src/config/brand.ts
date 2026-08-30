@@ -1,9 +1,20 @@
 export type BrandColors = {
+  /** Deep navy — the major dark background area (right diagonal section). */
   navy: string;
+  /** Professional blue — primary accent (diagonal line, arrows, highlights). */
   blue: string;
+  /** Electric blue — strong accent variant. */
+  electric: string;
+  /** Cyan — small, sparse highlights (circuit nodes, signal tag). */
   cyan: string;
+  /** Light area background — white canvas on the left/spacious side. */
   background: string;
+  /** Very light gray — subtle panels / near-boundary tint. */
+  lightGray: string;
+  /** Dark navy text on the light area. */
   text: string;
+  /** Muted secondary text (gray). */
+  muted: string;
 };
 
 export type BrandConfig = {
@@ -15,15 +26,16 @@ export type BrandConfig = {
   totalModules: number;
   timezone: string;
   colors: BrandColors;
-  /** Branded image dimensions. 1200×675 (16:9) matches a landscape LinkedIn feed
-   * image: compact in the feed, readable on mobile, and the single source of
-   * truth for both the SVG viewBox and the rasterized PNG size. */
+  /** Branded image dimensions. 1600×900 (16:9) is the professional personal-brand
+   * canvas: a white/light editorial content zone on the left split diagonally
+   * from a deep-navy branding zone on the right (spec: Phase 5I theme redesign).
+   * Single source of truth for the SVG viewBox and the rasterized PNG size. */
   image: {
     width: number;
     height: number;
   };
-  /** Brand mark asset reference (defined when image generation lands). */
-  mark: string | null;
+  /** Brand mark asset (TB monogram) used as the personal-brand signature. */
+  mark: string;
 };
 
 export const brand = {
@@ -35,15 +47,18 @@ export const brand = {
   totalModules: 8,
   timezone: "Africa/Addis_Ababa",
   colors: {
-    navy: "#0F172A",
-    blue: "#2563EB",
-    cyan: "#06B6D4",
-    background: "#F8FAFC",
-    text: "#111827",
+    navy: "#061A3A",
+    blue: "#1769FF",
+    electric: "#146BFF",
+    cyan: "#00C8E8",
+    background: "#FFFFFF",
+    lightGray: "#F4F6F8",
+    text: "#0B1930",
+    muted: "#5B677A",
   },
   image: {
-    width: 1200,
-    height: 675,
+    width: 1600,
+    height: 900,
   },
-  mark: null,
+  mark: "public/branding/tb-logo.png",
 } as const satisfies BrandConfig;

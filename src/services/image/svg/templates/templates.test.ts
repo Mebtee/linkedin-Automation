@@ -36,7 +36,10 @@ describe("renderTemplate", () => {
 
   it("includes the topic", () => {
     const svg = renderTemplate("large-number", baseInput);
-    expect(svg).toContain("Starting My Full-Stack Journey");
+    // Long headlines wrap automatically; each wrapped fragment of the topic is
+    // present in the rendered SVG.
+    expect(svg).toContain("Full-Stack");
+    expect(svg).toContain("Journey");
   });
 
   it("includes keywords", () => {

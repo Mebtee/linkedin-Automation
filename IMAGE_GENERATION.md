@@ -53,19 +53,23 @@ All images share a consistent identity:
 |---------|-------|
 | Series Title | "105 DAYS OF FULL-STACK DEVELOPMENT" |
 | Day Display | "DAY X / 105" |
-| Brand Mark | "105 DLJ" (text-based) |
-| Canvas | 1200 × 675 (16:9 landscape) |
+| Brand Mark | "105 DLJ" (text) + TB logo (personal-brand signature) |
+| Canvas | 1600 × 900 (16:9 landscape) |
+| Logo Asset | `public/branding/tb-logo.png` (transparent PNG, 200px display) |
 | Fonts | Arial, Helvetica, sans-serif (system fonts) |
 
 ### Colors
 
 | Name | Hex |
 |------|-----|
-| Navy | #0F172A |
-| Blue | #2563EB |
-| Cyan | #06B6D4 |
-| Background | #F8FAFC |
-| Text | #111827 |
+| Navy | #061A3A |
+| Blue | #1769FF |
+| Electric | #146BFF |
+| Cyan | #00C8E8 |
+| Background | #FFFFFF |
+| LightGray | #F4F6F8 |
+| Text | #0B1930 |
+| Muted | #5B677A |
 
 The template changes the layout, NOT the identity.
 
@@ -157,8 +161,8 @@ If `BrandedSvgProvider` throws or produces unsafe SVG:
 | `storage_path` | `text` | Supabase Storage path |
 | `storage_url` | `text` | Public URL |
 | `mime_type` | `text` | Always `image/svg+xml` |
-| `width` | `integer` | Image width (1200) |
-| `height` | `integer` | Image height (675) |
+| `width` | `integer` | Image width (1600) |
+| `height` | `integer` | Image height (900) |
 | `template` | `text` | Template used |
 | `alt_text` | `text` | Accessible alt text |
 | `metadata` | `jsonb` | Additional metadata |
@@ -263,10 +267,11 @@ Built from the final post text (not the AI prompt), so nothing is invented:
 
 ### Mobile-Safe Layout
 
-- Canvas: **1200×675 (16:9 landscape)** with ≥60px horizontal and ≥40px vertical
-  safe margins on every edge.
-- Content is centered/sized for legibility at feed-preview scale: text sizes stay
-  ≥14px, dense caption text is never copied into the image.
+- Canvas: **1600×900 (16:9 landscape)** with ≥80px horizontal and ≥60px vertical
+  safe margins on every edge; all content lives in the light zone
+  (`x ∈ [100, 940]`), well left of the navy diagonal split.
+- Content is sized for legibility at feed-preview scale: text sizes stay ≥14px,
+  dense caption text is never copied into the image.
 - Caps: headline ≤60 chars, subheadline ≤110, key-point labels ≤30, metaphor
   nodes ≤24 chars.
 
@@ -280,21 +285,52 @@ Each composition reuses shared primitives in `visual/compositions/draw.ts`
 (headline wrapping, tag pills, safe margins) from
 `visual/compositions/index.ts` (`renderVisualBrief`).
 
-## Phase 5I — Landscape 1200×675 (16:9) + Post Visual & Engagement Quality Upgrades
+## Phase 5I — Landscape 1600×900 (16:9) + Post Visual & Engagement Quality Upgrades
+
+### Professional personal-brand theme (Phase 5I redesign)
+
+The visual identity moved from the earlier blue-box infographic style to a clean
+**professional personal-brand editorial** system. Every image is built from four
+deterministic SVG layers in `src/services/image/theme/`:
+
+| Layer | Module | Purpose |
+|-------|--------|---------|
+| Background | `background.ts` | white/light content zone (left) + deep-navy diagonal branding block (right) + electric-blue accent line + sparse circuit decor |
+| Content | `primitives.ts` | editorial typography (tag/headline/subheadline/divider), clean technical nodes, arrows, cards, pills |
+| Branding | `branding.ts` | TB logo (lower-right navy block) + footer brand mark (bottom-left) |
+| Geometry | `geometry.ts` | single source of truth for the 1600×900 layout (canvas, content zone, diagonal, logo, safe margins) |
+
+Layout model (all coordinated from `geometry.ts`):
+
+- Canvas `1600×900`, `viewBox="0 0 1600 900"`.
+- A diagonal divider runs `(1104,0) → (856,900)`: everything left is a white/light
+  editorial content zone (`x ∈ [100, 940]`); everything right is the deep-navy
+  branding zone (~40–45% of the canvas).
+- A 5px electric-blue diagonal accent line (a thin cyan parallel hairline) follows
+  the divider; sparse deterministic circuit traces/nodes hug the boundary
+  (`circuit.ts` driven by a seeded FNV-1a + mulberry32 PRNG — no `Math.random()`).
+- Content safe area: ≥80px horizontal, ≥60px vertical. Text wraps automatically;
+  long headlines wrap to ≤2 lines.
+- TB logo embed: `public/branding/tb-logo.png` is processed at runtime with sharp
+  (navy chroma-key → transparent, downscaled to 200×200, optimized PNG data URI),
+  loaded once and memoized by `src/services/image/logo.ts` (`loadLogoEmbed`), then
+  inlined via `<image>` into every SVG at `(1280, 624)` in the navy block. When the
+  asset is unavailable it degrades to a text "TB" monogram so rendering never throws.
 
 ### Landscape 16:9 canvas
 
-- `brand.image` is **1200×675 (16:9)** — LinkedIn's standard landscape feed image,
-  compact in the feed and comfortable on mobile.
+- `brand.image` is **1600×900 (16:9)** — LinkedIn's standard landscape feed image,
+  sharp in the feed and comfortable on mobile.
 - `render.ts` `openSvg()` derives the SVG `viewBox`/`width`/`height` from the
-  brand canvas, so the SVG is 1200×675 and publishing rasterizes it to a
-  **1200×675 PNG** via `rasterizeToPng()` in `src/services/linkedin/publish.ts`.
-- All 8 content compositions were re-designed for the landscape canvas (not
-  scaled): left header block (concept tag → headline → subheadline), a centered
-  main technical visual, a bottom secondary band (technologies / supporting key
-  points), a small recruiter-relevant signal only when supported, and a centered
-  day/module badge. Every coordinate derives from the canvas dims.
-- Safe area: ≥60px horizontal and ≥40px vertical margins; nothing (text,
+  brand canvas, so the SVG is 1600×900 and publishing rasterizes it to a
+  **1600×900 PNG** via `rasterizeToPng()` in `src/services/linkedin/publish.ts`.
+- All 8 content compositions were re-designed for the new canvas (not scaled):
+  a left header block (concept tag → headline → subheadline), a centered main
+  technical visual in the light zone, a bottom secondary band (technologies /
+  supporting key points), a small recruiter-relevant signal only when supported
+  (placed in the top-right navy area), and the day/module badge. Every coordinate
+  derives from `theme/geometry.ts`.
+- Safe area: ≥80px horizontal and ≥60px vertical margins; nothing (text,
   diagrams, arrows, badges) leaves the canvas.
 
 ### Horizontal hierarchy
@@ -336,10 +372,13 @@ to unreadable sizes.
 ### Deterministic layout tests
 
 `src/services/image/landscape-layout.test.ts` asserts, for every sample post type:
-- SVG width=1200, height=675, `viewBox="0 0 1200 675"`, 16:9 aspect.
-- PNG rasterization output is 1200×675.
-- Text never enters the 60px horizontal / 40px vertical gutters; no negative or
-  out-of-canvas coordinates; nothing clipped.
+- SVG width=1600, height=900, `viewBox="0 0 1600 900"`, 16:9 aspect.
+- PNG rasterization output is 1600×900.
+- The navy diagonal branding block, navy/white split, and electric-blue accent
+  line are present; the TB logo embed is placed at the spec size in the navy
+  block and renders deterministically.
+- Text never enters the outer gutters (content starts at x=100, ≥80px left);
+  no negative or out-of-canvas coordinates; nothing clipped.
 - Long headlines are wrapped across multiple ≤34-char `<text>` nodes; long
   technology names stay on-canvas; all text ≥14px.
 - Font stack on every `<text>`; emojis stripped; XML special chars escaped.
@@ -351,9 +390,9 @@ to unreadable sizes.
 
 ### Sample output
 
-6 representative samples (learning, project, problem-solving, security,
-architecture/API, career) rasterized at 1200×675 — used for the 5I verification
-report.
+8 representative samples (learning, project, problem-solving, API, database,
+security, testing, architecture) rasterized at 1600×900 — used for the 5I
+verification report.
 
 ## Testing
 
@@ -369,10 +408,10 @@ Tests cover:
 - Server action error handling
 - Image section component rendering
 - Post metadata integration
-- Phase 5I: landscape 1200×675 (16:9) dimensions, safe-margin/non-clipping
+- Phase 5I: landscape 1600×900 (16:9) dimensions, safe-margin/non-clipping
   checks, long content wrapping, long technology names, font stack on every
   `<text>`, emoji stripping (tofu prevention), XML escaping, all 8 compositions,
-  PNG 1200×675 rasterization, and determinism
+  PNG 1600×900 rasterization, navy/white split + logo placement, and determinism
   (`src/services/image/landscape-layout.test.ts`)
 - Phase 5I: CTA selection is deterministic, format-mapped, free of
   engagement-bait, appears exactly once at the end of the published text, and
