@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GeneratedPostRow } from "@/types/generated-post";
+import { content } from "@/config/content";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,9 @@ type RegisterUploadSuccess = {
 
 /**
  * Formats a generated post into LinkedIn-compatible text.
- * Combines opening, body, takeaway, next step, and hashtags.
+ * Combines opening, body, takeaway, the portfolio link, and hashtags.
+ * The "next step" is intentionally NOT published — it is internal planning,
+ * not part of the post viewers should see.
  */
 function formatPostText(post: GeneratedPostRow): string {
   const sections: string[] = [];
@@ -98,9 +101,9 @@ function formatPostText(post: GeneratedPostRow): string {
   sections.push("");
   sections.push(post.takeaway);
 
-  if (post.next_step) {
+  if (content.portfolio.url) {
     sections.push("");
-    sections.push(`Next: ${post.next_step}`);
+    sections.push(`${content.portfolio.label} ${content.portfolio.url}`);
   }
 
   if (post.hashtags.length > 0) {

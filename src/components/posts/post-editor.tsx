@@ -39,6 +39,8 @@ type PostEditorProps = {
   opportunity?: ContentOpportunityRow | null;
   topic?: string | null;
   moduleTitle?: string | null;
+  /** Projects the learner actually built, from the journal's "what I built". */
+  projects?: string;
 };
 
 type Toast = {
@@ -46,14 +48,13 @@ type Toast = {
   message: string;
 };
 
-export function PostEditor({ post, quality: initialQuality, opportunity, topic, moduleTitle }: PostEditorProps) {
+export function PostEditor({ post, quality: initialQuality, opportunity, topic, moduleTitle, projects }: PostEditorProps) {
   const router = useRouter();
 
   // Form state
   const [opening, setOpening] = useState(post.opening);
   const [body, setBody] = useState(post.body);
   const [takeaway, setTakeaway] = useState(post.takeaway);
-  const [nextStep, setNextStep] = useState(post.next_step);
   const [hashtagsRaw, setHashtagsRaw] = useState(post.hashtags.join("\n"));
 
   // UI state
@@ -180,10 +181,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
       showToast("error", "Takeaway is required.");
       return;
     }
-    if (!nextStep.trim()) {
-      showToast("error", "Next step is required.");
-      return;
-    }
 
     setIsSaving(true);
     try {
@@ -191,7 +188,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
         opening: opening.trim(),
         body: body.trim(),
         takeaway: takeaway.trim(),
-        next_step: nextStep.trim(),
         hashtags,
       });
 
@@ -212,7 +208,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
     opening,
     body,
     takeaway,
-    nextStep,
     hashtags,
     currentPost.id,
     showToast,
@@ -269,7 +264,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
       setOpening(freshPost.opening);
       setBody(freshPost.body);
       setTakeaway(freshPost.takeaway);
-      setNextStep(freshPost.next_step);
       setHashtagsRaw(freshPost.hashtags.join("\n"));
       setCurrentPost(freshPost);
       setQuality(freshQuality);
@@ -613,25 +607,6 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
             />
           </section>
 
-          {/* Next Step */}
-          <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <label
-              htmlFor="next-step"
-              className="block text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
-            >
-              Next Step
-            </label>
-            <textarea
-              id="next-step"
-              value={nextStep}
-              onChange={(e) => setNextStep(e.target.value)}
-              rows={2}
-              disabled={!isEditable}
-              placeholder="What you will focus on tomorrow..."
-              className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder:text-zinc-500"
-            />
-          </section>
-
           {/* Hashtags */}
           <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
             <label
@@ -666,7 +641,7 @@ export function PostEditor({ post, quality: initialQuality, opportunity, topic, 
             opening={opening}
             body={body}
             takeaway={takeaway}
-            nextStep={nextStep}
+            projects={projects}
             hashtags={hashtags}
             status={currentPost.status}
           />

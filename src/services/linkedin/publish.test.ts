@@ -82,7 +82,7 @@ describe("LinkedIn Publish Service", () => {
       expect(body.visibility["com.linkedin.ugc.MemberNetworkVisibility"]).toBe("PUBLIC");
     });
 
-    it("formats post text with all sections", async () => {
+    it("formats post text with all sections and portfolio link, without 'next step'", async () => {
       const mockFetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ id: "urn:li:share:999" }),
@@ -105,7 +105,12 @@ describe("LinkedIn Publish Service", () => {
       expect(text).toContain("Hook line");
       expect(text).toContain("Main body text");
       expect(text).toContain("Key takeaway");
-      expect(text).toContain("Next: Next step info");
+      // The internal "next step" is never published.
+      expect(text).not.toContain("Next:");
+      expect(text).not.toContain("Next step info");
+      // The fixed portfolio link is always published so viewers can open the
+      // project folders on GitHub.
+      expect(text).toContain("https://github.com/Mebtee/codeops-portfolio");
       expect(text).toContain("#Tag1 #Tag2");
     });
 

@@ -150,7 +150,11 @@ export function ImageSection({ post }: ImageSectionProps) {
             src={`/api/media/${post.id}/image`}
             alt={asset.alt_text}
             className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700"
-            style={{ aspectRatio: "1 / 1", objectFit: "contain", background: "#F8FAFC" }}
+            style={{
+              aspectRatio: `${asset.width} / ${asset.height}`,
+              objectFit: "contain",
+              background: "#F8FAFC",
+            }}
           />
           <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
             Template: {TEMPLATE_LABELS[asset.template] ?? asset.template}

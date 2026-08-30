@@ -19,6 +19,16 @@ export const content = {
   },
 
   /**
+   * The learner's public portfolio. A single fixed link that holds the folders
+   * of the projects they built — every generated post points viewers here so
+   * they can open the project folders on GitHub.
+   */
+  portfolio: {
+    url: "https://github.com/Mebtee/codeops-portfolio",
+    label: "More projects:",
+  },
+
+  /**
    * Brand voice — the tone and style the AI must follow when generating posts.
    * Posts should sound like a real learner, not a marketing department.
    */

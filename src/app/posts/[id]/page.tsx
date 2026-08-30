@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGeneratedPost } from "@/services/generated-posts";
 import { getContentOpportunity } from "@/services/recruiter/persistence";
 import { evaluateRecruiterPostForSavedPost } from "@/services/recruiter/quality-service";
+import { getJournalEntry } from "@/services/journal";
 import { PostEditor } from "@/components/posts/post-editor";
 
 type DayContext = { topic: string | null; moduleTitle: string | null };
@@ -71,6 +72,16 @@ export default async function PostEditorPage({ params }: PageProps) {
   // Phase 5E: curriculum context (topic / module) for the summary panel.
   const context: DayContext = await loadDayContext(post.day_number);
 
+  // Projects the learner actually built — surfaced from the journal's
+  // "what I built" for that day, so the post preview can showcase them.
+  let projects: string | undefined;
+  try {
+    const journal = await getJournalEntry(post.day_number);
+    projects = journal?.what_i_built ?? undefined;
+  } catch {
+    projects = undefined;
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <PostEditor
@@ -79,6 +90,7 @@ export default async function PostEditorPage({ params }: PageProps) {
         opportunity={opportunity}
         topic={context.topic}
         moduleTitle={context.moduleTitle}
+        projects={projects}
       />
     </div>
   );

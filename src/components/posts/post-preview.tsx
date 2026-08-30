@@ -1,8 +1,11 @@
+import { content } from "@/config/content";
+
 type PostPreviewProps = {
   opening: string;
   body: string;
   takeaway: string;
-  nextStep: string;
+  /** Projects the learner actually built (from the journal's "what I built"). */
+  projects?: string;
   hashtags: string[];
   /** When provided and not "published", Preview shows the "Draft — Not Published" badge. */
   status?: string;
@@ -12,7 +15,7 @@ export function PostPreview({
   opening,
   body,
   takeaway,
-  nextStep,
+  projects,
   hashtags,
   status,
 }: PostPreviewProps) {
@@ -42,11 +45,6 @@ export function PostPreview({
             {takeaway}
           </p>
         )}
-        {nextStep && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            <span className="font-medium">Next step:</span> {nextStep}
-          </p>
-        )}
         {hashtags.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {hashtags.map((tag) => (
@@ -60,6 +58,30 @@ export function PostPreview({
           </div>
         )}
       </div>
+
+      {(projects || content.portfolio.url) && (
+        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/50">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Projects
+          </h4>
+          {projects && (
+            <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-700 dark:text-zinc-300">
+              {projects}
+            </p>
+          )}
+          {content.portfolio.url && (
+            <a
+              href={content.portfolio.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block text-xs font-medium text-[#2563EB] hover:underline dark:text-[#3b82f6]"
+            >
+              {content.portfolio.url}
+            </a>
+          )}
+        </div>
+      )}
+
       <p className="mt-4 text-[10px] text-zinc-400 dark:text-zinc-500">
         Approximate LinkedIn preview
       </p>

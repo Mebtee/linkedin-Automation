@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { ImageSection } from "./image-section";
 import type { GeneratedPostRow } from "@/types/generated-post";
+import { getPostImageAction } from "@/app/actions/post-images";
 
 vi.mock("@/app/actions/post-images", () => ({
   generatePostImageAction: vi.fn().mockResolvedValue({
@@ -81,5 +82,31 @@ describe("ImageSection", () => {
       expect(screen.getByText("Code Visual")).toBeDefined();
       expect(screen.getByText("Final Milestone")).toBeDefined();
     });
+  });
+
+  it("renders the image at the asset's own aspect ratio (wide 1200x630)", async () => {
+    vi.mocked(getPostImageAction).mockResolvedValueOnce({
+      success: true,
+      asset: {
+        id: "asset-1",
+        profile_id: "user-1",
+        generated_post_id: "post-1",
+        storage_path: "a/b.svg",
+        storage_url: "/api/media/post-1/image",
+        mime_type: "image/svg+xml",
+        width: 1200,
+        height: 630,
+        template: "concept-diagram",
+        alt_text: "Day 1",
+        metadata: null,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    });
+
+    render(<ImageSection post={mockPost} />);
+    const img = await screen.findByRole("img") as HTMLImageElement;
+    // Wide aspect ratio instead of the old square 1/1.
+    expect(img.style.aspectRatio).toBe("1200 / 630");
   });
 });
