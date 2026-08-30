@@ -12,6 +12,7 @@ import { brand } from "@/config/brand";
 import { getImageGenerationProvider } from "./index";
 import { validateImageInput } from "./validation";
 import { selectTemplate } from "./svg/template-selector";
+import { buildVisualBrief } from "./visual/brief";
 
 // ─── Image Generation Service ───────────────────────────────────────────────
 // Orchestrates image generation, storage, and persistence.
@@ -103,12 +104,40 @@ async function loadModule(
 
 // ─── Build Image Input ──────────────────────────────────────────────────────
 
-function buildImageInput(post: GeneratedPostRow, curriculum: { topic: string; moduleNumber: number; moduleTitle: string }): ImageGenerationInput {
+async function loadPostType(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opportunityId: string | null,
+): Promise<string | null> {
+  if (!opportunityId) return null;
+  const { data, error } = await supabase
+    .from("content_opportunities")
+    .select("post_type")
+    .eq("id", opportunityId)
+    .single();
+  if (error || !data) return null;
+  return (data as { post_type: string }).post_type;
+}
+
+async function buildImageInput(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  post: GeneratedPostRow,
+  curriculum: { topic: string; moduleNumber: number; moduleTitle: string },
+): Promise<ImageGenerationInput> {
   const template = selectTemplate({
     explicitTemplate: post.image_template,
     dayNumber: post.day_number,
     topic: curriculum.topic,
     format: post.format,
+  });
+
+  const postType = await loadPostType(supabase, post.opportunity_id);
+
+  const visualBrief = buildVisualBrief({
+    post,
+    topic: curriculum.topic,
+    moduleNumber: curriculum.moduleNumber,
+    moduleTitle: curriculum.moduleTitle,
+    postType,
   });
 
   return {
@@ -121,6 +150,7 @@ function buildImageInput(post: GeneratedPostRow, curriculum: { topic: string; mo
     keywords: post.image_keywords ?? [],
     visualConcept: post.image_visual_concept || "",
     template,
+    visualBrief,
   };
 }
 
@@ -159,7 +189,7 @@ export async function generatePostImage(
   const moduleData = await loadModule(supabase, curriculumDay.module_id);
 
   // Build input
-  const input = buildImageInput(post, {
+  const input = await buildImageInput(supabase, post, {
     topic: curriculumDay.topic,
     moduleNumber: moduleData.module_number,
     moduleTitle: moduleData.title,

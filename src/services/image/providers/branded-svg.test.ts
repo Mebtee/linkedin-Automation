@@ -60,4 +60,35 @@ describe("BrandedSvgProvider", () => {
     const result = await provider.generateImage(validInput);
     expect(result.template).toBe("large-number");
   });
+
+  it("prefers the content composition when a visualBrief is present", async () => {
+    const provider = new BrandedSvgProvider();
+    const withBrief: ImageGenerationInput = {
+      ...validInput,
+      visualBrief: {
+        headline: "Git Workflow",
+        subheadline: "Version your work as commits across branches.",
+        concept: "Git Workflow",
+        visualMetaphor: "CODE → COMMIT → BRANCH → MERGE",
+        keyPoints: [
+          { label: "COMMIT", detail: "Save a snapshot" },
+          { label: "BRANCH", detail: "Isolate work" },
+          { label: "MERGE", detail: "Combine changes" },
+        ],
+        technologies: ["Git"],
+        recruiterSignal: "Engineering Execution",
+        postType: "PROJECT_SHOWCASE",
+        dayNumber: 5,
+        module: "Git Module",
+        theme: "project-build",
+        composition: "concept-flow",
+      },
+    };
+    const result = await provider.generateImage(withBrief);
+    // Composition path renders the concept content, not the classic day-number
+    // template (which would not contain the concept nodes).
+    expect(result.svg).toContain("Git Workflow");
+    expect(result.svg).toContain("BRANCH");
+    expect(result.svg).toContain("MERGE");
+  });
 });

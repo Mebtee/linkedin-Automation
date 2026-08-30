@@ -46,6 +46,30 @@ export function validateImageInput(input: unknown): ImageGenerationInput {
     throw new ImageValidationError("template must be a non-empty string", "IMAGE_INVALID_INPUT");
   }
 
+  // Optional structured brief (Phase 5G). Validated only when present so the
+  // classic path remains fully supported.
+  if (obj.visualBrief != null) {
+    const brief = obj.visualBrief as Record<string, unknown>;
+    if (typeof brief !== "object" || brief === null) {
+      throw new ImageValidationError("visualBrief must be an object", "IMAGE_INVALID_INPUT");
+    }
+    if (typeof brief.headline !== "string" || brief.headline.trim() === "") {
+      throw new ImageValidationError("visualBrief.headline must be a non-empty string", "IMAGE_INVALID_INPUT");
+    }
+    if (!Array.isArray(brief.keyPoints)) {
+      throw new ImageValidationError("visualBrief.keyPoints must be an array", "IMAGE_INVALID_INPUT");
+    }
+    if (!Array.isArray(brief.technologies)) {
+      throw new ImageValidationError("visualBrief.technologies must be an array", "IMAGE_INVALID_INPUT");
+    }
+    if (typeof brief.theme !== "string" || brief.theme.trim() === "") {
+      throw new ImageValidationError("visualBrief.theme must be a non-empty string", "IMAGE_INVALID_INPUT");
+    }
+    if (typeof brief.composition !== "string" || brief.composition.trim() === "") {
+      throw new ImageValidationError("visualBrief.composition must be a non-empty string", "IMAGE_INVALID_INPUT");
+    }
+  }
+
   return input as ImageGenerationInput;
 }
 
