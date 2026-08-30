@@ -174,10 +174,11 @@ export function buildVisualBrief(ctx: BriefContext): VisualBrief {
   const emphasis = selectEmphasis({ postType, format: post.format, text: sourceText });
 
   // Mobile-safe heading caps: headline ≤ 60, subheadline ≤ 100 (safe margins
-  // guarantee the rest of the layout stays inside the 1200×630 canvas).
-  const headline = truncate(post.image_headline || chain?.title || priority.primary || topic, 60);
+  // guarantee the rest of the layout stays inside the 1200×675 landscape canvas).
+  // Emojis are stripped so unsupported glyphs never render as tofu boxes.
+  const headline = truncate(stripEmojis(post.image_headline || chain?.title || priority.primary || topic), 60);
   const subheadline = truncate(
-    post.image_subheadline || chain?.summary || firstSentence(cleanVisualText(post.takeaway)),
+    stripEmojis(post.image_subheadline || chain?.summary || firstSentence(cleanVisualText(post.takeaway))),
     100,
   );
 

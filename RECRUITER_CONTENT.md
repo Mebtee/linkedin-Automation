@@ -360,6 +360,28 @@ full system; recruiter-relevant rules:
   secondary/optional) strictly from the final post/curriculum text — nothing is
   invented or embellished.
 
+## Phase 5I — Landscape visual + engagement quality
+
+- Canvas is **1200×675 (16:9 landscape)** — LinkedIn's standard landscape feed
+  image; compact and readable on mobile. All 8 compositions re-laid out inside
+  ≥60px horizontal / ≥40px vertical safe margins, with a small skill signal
+  (e.g. "PROBLEM SOLVING") only when the content genuinely supports it. See
+  [IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1200675-169--post-visual--engagement-quality-upgrades).
+- Published posts gain a **deterministic call-to-action** appended once at the
+  end (`src/config/content.ts` → `content.cta`, selected by `selectCta()` in
+  `src/services/linkedin/cta.ts`). The line is a genuine, low-pressure invite —
+  no engagement bait, no fake controversy, no emoji spam.
+- The published text runs `opening → body → takeaway → portfolio link → CTA →
+  hashtags`; the internal `next_step` stays unpublished.
+
+## What Phase 5I explicitly did NOT do
+
+- No new image providers/architecture; still programmatic SVG + Sharp at $0 cost.
+- No OAuth change, no LinkedIn publishing/scheduling API change, no opportunity /
+  scoring / journal / DB schema / auth change.
+- No `Math.random()`. No invented metrics; the anti-hallucination contract holds
+  inside the image pipeline and in the CTA text.
+
 ## What Phase 5H explicitly did NOT do
 
 - No new image providers, API keys, or secrets; still programmatic SVG + Sharp at

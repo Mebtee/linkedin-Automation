@@ -141,3 +141,41 @@ export function drawPrimaryTag(x: number, y: number, text: string): string {
           fill="${c.blue}" opacity="0.35" stroke="${c.cyan}" stroke-width="1.25" />
     <text x="${x}" y="${y + 7}" text-anchor="middle" font-family="${FONT}" font-size="18" font-weight="700" letter-spacing="2" fill="${c.cyan}">${escapeXml(label)}</text>`;
 }
+
+// ─── Landscape (16:9) left-anchored text helpers ─────────────────────────────
+// The 1200×675 layout leads with a left-aligned header block so the concept reads
+// first; these anchor text to the left edge of the content zone instead of the
+// canvas center. Wrapping and truncation rules match the centered variants.
+
+/** Left-anchored uppercase concept tag (landscape header). */
+export function drawPrimaryTagLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const label = truncate(text.toUpperCase(), 34);
+  const w = Math.min(label.length * 13 + 48, 620);
+  return `
+    <rect x="${x}" y="${y - 20}" width="${w}" height="40" rx="20"
+          fill="${c.blue}" opacity="0.32" stroke="${c.cyan}" stroke-width="1.1" />
+    <text x="${x + w / 2}" y="${y + 6}" text-anchor="middle" font-family="${FONT}" font-size="16" font-weight="700" letter-spacing="2" fill="${c.cyan}">${escapeXml(label)}</text>`;
+}
+
+/** Left-anchored headline, wrapped to a compact 2 lines on the landscape canvas. */
+export function drawHeadlineLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 60), 640, 32, 2);
+  const lineH = 38;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="32" font-weight="800" fill="white">${escapeXml(line)}</text>`
+  ).join("");
+}
+
+/** Left-anchored lighter subheadline, wrapped to a compact 2 lines. */
+export function drawSubheadlineLeft(x: number, y: number, text: string): string {
+  if (!text) return "";
+  const lines = wrapCentered(truncate(text, 100), 620, 17, 2);
+  const lineH = 22;
+  const start = y - ((lines.length - 1) * lineH) / 2;
+  return lines.map((line, i) =>
+    `<text x="${x}" y="${start + i * lineH}" text-anchor="start" font-family="${FONT}" font-size="17" font-weight="400" fill="${c.cyan}" opacity="0.92">${escapeXml(line)}</text>`
+  ).join("");
+}

@@ -15,7 +15,9 @@ export type BrandConfig = {
   totalModules: number;
   timezone: string;
   colors: BrandColors;
-  /** Branded image dimensions (LinkedIn standard wide feed ratio). */
+  /** Branded image dimensions. 1200×675 (16:9) matches a landscape LinkedIn feed
+   * image: compact in the feed, readable on mobile, and the single source of
+   * truth for both the SVG viewBox and the rasterized PNG size. */
   image: {
     width: number;
     height: number;
@@ -41,7 +43,7 @@ export const brand = {
   },
   image: {
     width: 1200,
-    height: 630,
+    height: 675,
   },
   mark: null,
 } as const satisfies BrandConfig;

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GeneratedPostRow } from "@/types/generated-post";
 import { content } from "@/config/content";
+import { selectCta } from "./cta";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -88,9 +89,10 @@ type RegisterUploadSuccess = {
 
 /**
  * Formats a generated post into LinkedIn-compatible text.
- * Combines opening, body, takeaway, the portfolio link, and hashtags.
+ * Combines opening, body, takeaway, the CTA, the portfolio link, and hashtags.
  * The "next step" is intentionally NOT published — it is internal planning,
- * not part of the post viewers should see.
+ * not part of the post viewers should see. The CTA is appended exactly once,
+ * after the takeaway/portfolio and before hashtags, never inside the body.
  */
 function formatPostText(post: GeneratedPostRow): string {
   const sections: string[] = [];
@@ -105,6 +107,9 @@ function formatPostText(post: GeneratedPostRow): string {
     sections.push("");
     sections.push(`${content.portfolio.label} ${content.portfolio.url}`);
   }
+
+  sections.push("");
+  sections.push(selectCta(post.format));
 
   if (post.hashtags.length > 0) {
     sections.push("");

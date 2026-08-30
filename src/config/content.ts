@@ -29,6 +29,33 @@ export const content = {
   },
 
   /**
+   * Call-to-action lines appended to the end of published posts. Each is a
+   * genuine, low-pressure invite to keep the conversation going. Selected
+   * deterministically by post format; never placed inside the technical body
+   * and never repeated.
+   */
+  cta: {
+    variants: {
+      default:
+        "Have an idea, question, or a different approach? Share it in the comments or DM me — I'd love to hear your thoughts.",
+      "what-i-learned":
+        "What have you been learning this week? I'd love to hear it in the comments.",
+      challenge:
+        "Faced a similar bug yourself? I'd like to hear how you worked through it.",
+      "small-win":
+        "What's the last small win you hit? Tell me in the comments.",
+      project:
+        "Curious about the approach or want the details? Ask in the comments or DM me.",
+      concept:
+        "Was this concept new to you too? I'd love to hear how you'd explain it.",
+      reflection:
+        "How far along are you in your own learning journey? I'd love to hear about it.",
+      "practical-lesson":
+        "Got a practical tip you've picked up lately? Share it in the comments.",
+    },
+  } as const,
+
+  /**
    * Brand voice — the tone and style the AI must follow when generating posts.
    * Posts should sound like a real learner, not a marketing department.
    */

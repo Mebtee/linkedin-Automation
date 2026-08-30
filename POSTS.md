@@ -410,6 +410,19 @@ composition and a recruiter-aware emphasis, and validates the brief for
 unsupported claims before rendering. Regenerating an image reflects the current
 (saved) post content. See [IMAGE_GENERATION.md](IMAGE_GENERATION.md#visual-brief-system-phase-5g--5h).
 
+Since Phase 5I images are **landscape 1200×675 (16:9)**: the brand canvas is the
+single source of truth for the SVG `viewBox`/size and the rasterized PNG, and
+every composition is laid out for the landscape feed (left concept header,
+centered main visual, bottom secondary band, safe 60/40px margins). See
+[IMAGE_GENERATION.md](IMAGE_GENERATION.md#phase-5i--landscape-1200675-169--post-visual--engagement-quality-upgrades).
+
+The **published text structure** is:
+`opening → body → takeaway → portfolio link → CTA → hashtags`. The
+call-to-action comes from `src/config/content.ts` (`content.cta`) and is picked
+deterministically by post format via `src/services/linkedin/cta.ts`
+(`selectCta`); it is appended exactly once at the end — never inside the body and
+never repeated. The internal `next_step` remains intentionally unpublished.
+
 ### Image Actions
 
 | Action | Description |

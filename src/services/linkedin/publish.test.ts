@@ -114,6 +114,36 @@ describe("LinkedIn Publish Service", () => {
       expect(text).toContain("#Tag1 #Tag2");
     });
 
+    it("appends the CTA exactly once, at the end, and never inside the body", async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: "urn:li:share:777" }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const post = makePost({
+        opening: "Hook line",
+        body: "Main body text",
+        takeaway: "Key takeaway",
+        hashtags: ["#Tag1"],
+      });
+
+      await publishToLinkedIn("token", post, "urn:li:person:u1");
+
+      const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      const text = body.specificContent["com.linkedin.ugc.ShareContent"].shareCommentary.text;
+
+      // The CTA appears exactly once.
+      const cta = "What have you been learning this week?";
+      expect(text).toContain(cta);
+      expect(text.split(cta).length - 1).toBe(1);
+      // It is not inside the technical body (body is followed by takeaway/CTA).
+      const bodyEnd = text.indexOf("Main body text");
+      expect(text.indexOf(cta)).toBeGreaterThan(bodyEnd);
+      // It carries no engagement bait.
+      expect(cta.toLowerCase()).not.toMatch(/\b(like and share|agree|follow for more)\b/);
+    });
+
     it("truncates text exceeding 3000 characters", async () => {
       const mockFetch = vi.fn().mockResolvedValueOnce({
         ok: true,
