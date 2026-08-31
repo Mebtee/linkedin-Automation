@@ -5,6 +5,7 @@ import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
 import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
+import { SVG_FONT_FAMILY } from "../../fonts";
 
 // ─── Template: FINAL_MILESTONE ───────────────────────────────────────────────
 // Capstone editorial layout: a centred completion message with a confirmation
@@ -29,7 +30,7 @@ export function renderFinalMilestone(input: ImageGenerationInput, logo: LogoEmbe
     `<path d="M ${check.x - 26} ${check.y} l 17 17 l 34 -34" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />`,
     `<rect x="${bar.x}" y="${bar.y}" width="${bar.w}" height="${bar.h}" rx="7" fill="#E7ECF4" />`,
     `<rect x="${bar.x}" y="${bar.y}" width="${Number(fillW.toFixed(1))}" height="${bar.h}" rx="7" fill="${brand.colors.cyan}" opacity="0.9" />`,
-    `<text x="${bar.x}" y="${bar.y - 14}" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">JOURNEY COMPLETE</text>`,
+    `<text x="${bar.x}" y="${bar.y - 14}" font-family="${SVG_FONT_FAMILY}" font-size="14" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">JOURNEY COMPLETE</text>`,
   ].join("");
 
   return renderScaffold(`milestone:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));

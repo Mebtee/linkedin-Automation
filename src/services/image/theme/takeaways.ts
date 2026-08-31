@@ -30,6 +30,24 @@ export const MAX_TAKEAWAYS = 4;
  * validation / validates) and simple plural suffixing.
  */
 export const TAKEAWAY_VOCAB: Readonly<Record<string, readonly { readonly label: string; readonly keywords: readonly string[] }[]>> = {
+  "Python Foundations": [
+    { label: "COLLECTIONS", keywords: ["collection", "collections", "lists", "tuples", "dictionaries", "sets"] },
+    { label: "FILE I/O", keywords: ["file", "files", "reading", "writing", "i/o", "io"] },
+    { label: "ERROR HANDLING", keywords: ["error", "errors", "exception", "exceptions", "handle", "handling"] },
+    { label: "COMPREHENSIONS", keywords: ["comprehension", "comprehensions"] },
+  ],
+  "File I/O": [
+    { label: "OPEN CAREFULLY", keywords: ["open", "opens", "with open"] },
+    { label: "READ / WRITE", keywords: ["read", "reads", "reading", "write", "writes", "writing"] },
+    { label: "PROCESS DATA", keywords: ["process", "processes", "processing", "batch"] },
+    { label: "CLOSE SAFELY", keywords: ["close", "closes", "closing", "context manager"] },
+  ],
+  "Error Handling": [
+    { label: "TRY / EXCEPT", keywords: ["try", "except", "try/except", "try except"] },
+    { label: "RECOVER", keywords: ["recover", "recovery", "recovers"] },
+    { label: "DEBUG", keywords: ["debug", "debugging", "traceback", "stack trace"] },
+    { label: "EXCEPTIONS", keywords: ["exception", "exceptions", "raise", "raises"] },
+  ],
   "Row-Level Security": [
     { label: "RLS", keywords: ["rls", "row level security", "row-level security"] },
     { label: "Policies", keywords: ["policy"] },

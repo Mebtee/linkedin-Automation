@@ -5,6 +5,7 @@ import { buildVisualBrief } from "@/services/image/visual/brief";
 import { renderVisualBrief } from "@/services/image/visual/compositions";
 import { loadLogoEmbed } from "@/services/image/logo";
 import { checkSvgSafety } from "@/services/image/svg/escape";
+import { initEmbeddedFont } from "@/services/image/fonts";
 import type { GeneratedPostRow } from "@/types/generated-post";
 
 function basePost(overrides: Partial<GeneratedPostRow> = {}): GeneratedPostRow {
@@ -43,14 +44,15 @@ function basePost(overrides: Partial<GeneratedPostRow> = {}): GeneratedPostRow {
 
 const FIXTURES: Array<{ label: string; postType: string | null; topic: string; post: Partial<GeneratedPostRow> }> = [
   {
-    label: "database",
-    postType: "DATABASE_ENGINEERING",
-    topic: "Database Indexing",
+    label: "python",
+    postType: "TECHNICAL_LESSON",
+    topic: "Python Collections, Files & Errors",
     post: {
-      opening: "A query was slow because it scanned every row.",
-      body: "Adding a database index turned the lookup into a fast path to the right rows.",
-      takeaway: "The right index avoids a full table scan and keeps lookups fast.",
-      next_step: "Inspect the query plan to confirm the index is used.",
+      opening: "Learning Python Collections, Files & Errors.",
+      body: "Section 5 covers lists, tuples, dictionaries, sets and comprehensions; Section 7 covers reading and writing files.",
+      takeaway: "Python collections, file I/O and error handling are the foundation of data processing.",
+      next_step: "Apply these patterns to batch file processing.",
+      image_headline: "Python Collections, Files & Errors",
     },
   },
   {
@@ -62,6 +64,17 @@ const FIXTURES: Array<{ label: string; postType: string | null; topic: string; p
       body: "The client sends a request to the endpoint, the route validates the payload and returns a response.",
       takeaway: "A clean client → endpoint → response flow keeps the API predictable.",
       next_step: "Add schema validation on every endpoint next.",
+    },
+  },
+  {
+    label: "database",
+    postType: "DATABASE_ENGINEERING",
+    topic: "Database Indexing",
+    post: {
+      opening: "A query was slow because it scanned every row.",
+      body: "Adding a database index turned the lookup into a fast path to the right rows.",
+      takeaway: "The right index avoids a full table scan and keeps lookups fast.",
+      next_step: "Inspect the query plan to confirm the index is used.",
     },
   },
   {
@@ -86,23 +99,13 @@ const FIXTURES: Array<{ label: string; postType: string | null; topic: string; p
       next_step: "Lift state up where two components share it.",
     },
   },
-  {
-    label: "testing",
-    postType: "TECHNICAL_LESSON",
-    topic: "Writing Tests",
-    post: {
-      opening: "Tests catch regressions before they reach production.",
-      body: "Unit tests cover the happy path, edge cases cover the weird input, assertions check the outcome.",
-      takeaway: "Tests are confidence you can ship to production.",
-      next_step: "Add a regression test for the bug just fixed.",
-    },
-  },
 ];
 
 async function main(): Promise<void> {
   const outDir = join(process.cwd(), "scripts", "samples");
   mkdirSync(outDir, { recursive: true });
   const logo = await loadLogoEmbed();
+  await initEmbeddedFont();
 
   for (const f of FIXTURES) {
     const brief = buildVisualBrief({
@@ -117,13 +120,18 @@ async function main(): Promise<void> {
     if (safety) throw new Error(`${f.label}: unsafe SVG — ${safety}`);
 
     const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    const meta = await sharp(png).metadata();
 
     writeFileSync(join(outDir, `${f.label}.svg`), svg, "utf8");
     writeFileSync(join(outDir, `${f.label}.png`), png);
 
     console.log(`--- ${f.label} ---`);
+    console.log(`composition: ${brief.composition}`);
+    console.log(`concept: ${brief.concept}`);
+    console.log(`metaphor: ${brief.visualMetaphor}`);
+    console.log(`headline: ${brief.headline}`);
     console.log(`takeaways: [${brief.keyTakeaways?.join(", ") ?? ""}]`);
-    console.log(`panel on canvas: ${svg.includes("KEY TAKEAWAYS")} (${(brief.keyTakeaways ?? []).length} items)`);
+    console.log(`png: ${meta.width}x${meta.height}`);
   }
   console.log("\nWrote samples to scripts/samples/");
 }

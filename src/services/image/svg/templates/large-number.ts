@@ -5,6 +5,7 @@ import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
 import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPrimaryTag, drawSubheadline, drawPill } from "../../theme/primitives";
+import { SVG_FONT_FAMILY } from "../../fonts";
 
 // ─── Template: LARGE_NUMBER ─────────────────────────────────────────────────
 // Editorial milestone image: day tag, big headline, supporting line, keyword
@@ -15,7 +16,7 @@ export function renderLargeNumber(input: ImageGenerationInput, logo: LogoEmbed |
   const dayLabel = `DAY ${input.dayNumber} / ${brand.totalDays}`;
 
   const ghost = `
-    <text x="${cx}" y="300" text-anchor="middle" font-family="Arial, Helvetica, sans-serif"
+    <text x="${cx}" y="300" text-anchor="middle" font-family="${SVG_FONT_FAMILY}"
           font-size="230" font-weight="900" fill="${brand.colors.navy}" opacity="0.06">
       ${input.dayNumber}
     </text>`;

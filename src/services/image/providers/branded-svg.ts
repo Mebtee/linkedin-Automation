@@ -10,6 +10,7 @@ import { checkSvgSafety } from "../svg/escape";
 import { renderVisualBrief } from "../visual/compositions";
 import { validateVisualBrief } from "../validation";
 import { loadLogoEmbed } from "../logo";
+import { initEmbeddedFont } from "../fonts";
 
 // ─── Branded SVG Provider ───────────────────────────────────────────────────
 // Generates branded SVG images for LinkedIn posts.
@@ -26,6 +27,9 @@ export class BrandedSvgProvider implements ImageGenerationProvider {
     let svg: string;
 
     try {
+      // Ensure the embedded font is ready before rendering (memoized).
+      await initEmbeddedFont();
+
       // Prefer the content-driven composition when a valid VisualBrief exists.
       // If the brief fails mobile-safe/anti-hallucination validation, degrade to
       // the classic template rather than rendering an unsafe/overflowing image.

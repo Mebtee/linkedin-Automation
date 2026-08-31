@@ -18,6 +18,7 @@ import {
   drawPrimaryTagLeft,
 } from "./draw";
 import { clampKeyPoints } from "../themes";
+import { SVG_FONT_FAMILY } from "../../fonts";
 
 // ─── Landscape canvas (`brand.image` = 1600×900, LinkedIn 16:9 feed ratio) ───
 // A professional personal-brand editorial layout (Phase 5I). The branded
@@ -38,13 +39,13 @@ import { clampKeyPoints } from "../themes";
 const H = brand.image.height;
 
 const HEAD_X = LIGHT_LEFT;
-const TAG_Y = 128;
-const HEAD_Y = 236;
-const SUB_Y = 302;
+const TAG_Y = 124;
+const HEAD_Y = 232;
+const SUB_Y = 300;
 const ACCENT_Y = 336;
-const VISUAL_Y = 368;
+const VISUAL_Y = 376;
 const FOOTER_Y = H - 64;
-const PILLS_Y = 640;
+const PILLS_Y = 660;
 
 const VISUAL_MAX_X = LIGHT_RIGHT - 80;
 
@@ -95,7 +96,7 @@ function drawDayBadgeCd(x: number, y: number, dayNumber?: number, module?: strin
   return `
     <rect x="${x - 140}" y="${y - 20}" width="280" height="40" rx="20"
           fill="none" stroke="${brand.colors.blue}" stroke-width="1" opacity="0.4" />
-    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(label)}</text>`;
+    <text x="${x}" y="${y + 6}" text-anchor="middle" font-family="${SVG_FONT_FAMILY}" font-size="15" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(label)}</text>`;
 }
 
 /** Horizontal chain of nodes connected by left→right arrows, centered in zone. */
@@ -333,7 +334,7 @@ function renderInputProcessOutput(brief: VisualBrief): string {
   svg += dayFeather(brief);
   captions.forEach((caption, i) => {
     const x = startX + i * (boxW + gap);
-    svg += `<text x="${x + boxW / 2}" y="${y - 24}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(caption)}</text>`;
+    svg += `<text x="${x + boxW / 2}" y="${y - 24}" text-anchor="middle" font-family="${SVG_FONT_FAMILY}" font-size="15" font-weight="700" letter-spacing="2" fill="${brand.colors.muted}">${escapeXml(caption)}</text>`;
     svg += drawNode(x, y, boxW, boxH, points[i]?.label || caption, { accent: stageAccents[i], sub: points[i]?.detail });
     if (i < 2) {
       svg += drawArrow(x + boxW + 4, y + boxH / 2, x + boxW + gap - 4, y + boxH / 2);

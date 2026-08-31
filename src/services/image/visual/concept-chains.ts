@@ -25,20 +25,70 @@ export type ChainMatch = {
 
 interface ChainRule {
   readonly match: readonly string[];
+  /** Optional: when present, ALL tokens must match for the rule to fire
+   * (multi-concept posts). Enables chains like "Collections I/O/Errors". */
+  readonly requireAll?: readonly string[];
   readonly chain: ConceptChain;
 }
 
-/** Word-boundary keyword match — avoids false positives like "ci" in "tracing". */
+/** Word-boundary keyword match — avoids false positives like "ci" in "tracing".
+ * Tolerates simple plural suffixes so "collection" also matches "collections". */
 function matchesKeyword(text: string, keyword: string): boolean {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+  return new RegExp(`\\b${escaped}(s|es|ing|ed)?\\b`, "i").test(text);
 }
 
 function anyKeyword(text: string, keywords: readonly string[]): boolean {
   return keywords.some((k) => matchesKeyword(text, k));
 }
 
+/** True only when EVERY required token appears (handles multi-concept posts). */
+function allRequired(text: string, required: readonly string[]): boolean {
+  return required.every((k) => matchesKeyword(text, k));
+}
+
+function ruleMatches(text: string, rule: ChainRule): boolean {
+  if (rule.requireAll && rule.requireAll.length > 0) {
+    return allRequired(text, rule.requireAll);
+  }
+  return anyKeyword(text, rule.match);
+}
+
 const CHAIN_RULES: readonly ChainRule[] = [
+  {
+    match: ["python collections", "collections, files", "python data structures", "python file", "file i/o", "file io"],
+    requireAll: ["collection", "file", "error"],
+    chain: {
+      title: "Python Foundations",
+      nodes: ["COLLECTIONS", "FILE I/O", "ERROR HANDLING"],
+      summary: "Collections organise data, files move it, and error handling keeps it safe.",
+    },
+  },
+  {
+    match: ["file i/o", "file io", "reading and writing files", "read files", "write files", "file read", "file write", "open a file", "with open", "file processing"],
+    requireAll: ["file", "read"],
+    chain: {
+      title: "File I/O",
+      nodes: ["OPEN", "READ/WRITE", "PROCESS", "CLOSE"],
+      summary: "Open a file, read or write it, process the data, then close it safely.",
+    },
+  },
+  {
+    match: ["debug", "bug", "symptom", "stack trace", "root cause", "diagnosis", "debugging"],
+    chain: {
+      title: "Debugging",
+      nodes: ["SYMPTOM", "INVESTIGATION", "ROOT CAUSE", "FIX"],
+      summary: "Trace a symptom back to its root cause, then fix it.",
+    },
+  },
+  {
+    match: ["error handling", "exception", "exceptions", "try/except", "try except", "raise error", "handle errors", "error recovery", "safe error handling", "fail gracefully"],
+    chain: {
+      title: "Error Handling",
+      nodes: ["RISK", "TRY", "HANDLE", "RECOVER"],
+      summary: "Guard risky code, catch errors, and recover cleanly.",
+    },
+  },
   {
     match: ["row level security", "rls", "ownership", "row-level security", "user isolation"],
     chain: {
@@ -129,14 +179,6 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["debug", "bug", "symptom", "stack trace", "root cause", "diagnosis"],
-    chain: {
-      title: "Debugging",
-      nodes: ["SYMPTOM", "INVESTIGATION", "ROOT CAUSE", "FIX"],
-      summary: "Trace a symptom back to its root cause, then fix it.",
-    },
-  },
-  {
     match: ["tradeoff", "trade-off", "vs", "versus", "compare", "comparison", "decision"],
     chain: {
       title: "Engineering Tradeoff",
@@ -177,7 +219,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
 export function findConceptChain(text: string): ConceptChain | null {
   const combined = text.toLowerCase();
   for (const rule of CHAIN_RULES) {
-    if (anyKeyword(combined, rule.match)) {
+    if (ruleMatches(combined, rule)) {
       return rule.chain;
     }
   }
@@ -258,7 +300,7 @@ export function detectTopConcepts(text: string, topic: string): ConceptPriority 
   const combined = `${text} ${topic}`.toLowerCase();
   const matched: string[] = [];
   for (const rule of CHAIN_RULES) {
-    if (anyKeyword(combined, rule.match)) {
+    if (ruleMatches(combined, rule)) {
       if (!matched.includes(rule.chain.title)) matched.push(rule.chain.title);
     }
   }

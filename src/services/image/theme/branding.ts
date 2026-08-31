@@ -2,6 +2,7 @@ import { brand } from "@/config/brand";
 import { escapeXml } from "../svg/escape";
 import type { LogoEmbed } from "../logo";
 import { FOOTER_LINE1_Y, FOOTER_LINE2_Y, FOOTER_X, LOGO } from "./geometry";
+import { SVG_FONT_FAMILY } from "../fonts";
 
 // ─── Branding Layer (Phase 5I) ───────────────────────────────────────────────
 // Third SVG layer: the TB personal-brand signature (lower-right, inside the navy
@@ -10,7 +11,7 @@ import { FOOTER_LINE1_Y, FOOTER_LINE2_Y, FOOTER_X, LOGO } from "./geometry";
 // layer degrades to a plain "TB" monogram so rendering never throws.
 
 const c = brand.colors;
-const FONT = "Arial, Helvetica, sans-serif";
+const FONT = SVG_FONT_FAMILY;
 
 /** TB logo image preserving the square asset's aspect ratio (spec §2/§10). */
 export function renderLogo(logo: LogoEmbed | null): string {

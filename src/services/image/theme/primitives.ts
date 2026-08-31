@@ -2,6 +2,7 @@ import { brand } from "@/config/brand";
 import { escapeXml } from "../svg/escape";
 import { truncate } from "../visual/themes";
 import { SIGNAL_TAG_X, SIGNAL_TAG_Y } from "./geometry";
+import { SVG_FONT_FAMILY } from "../fonts";
 
 // ─── Theme Primitives (Phase 5I professional redesign) ───────────────────────
 // Reusable building blocks layered on the branded background:
@@ -12,7 +13,7 @@ import { SIGNAL_TAG_X, SIGNAL_TAG_Y } from "./geometry";
 // dashboard-style cards, minimal decoration. All text is XML-escaped.
 
 const c = brand.colors;
-const FONT = "Arial, Helvetica, sans-serif";
+const FONT = SVG_FONT_FAMILY;
 
 // ─── Text wrapping ───────────────────────────────────────────────────────────
 

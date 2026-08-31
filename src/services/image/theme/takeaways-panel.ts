@@ -2,6 +2,7 @@ import { brand } from "@/config/brand";
 import { escapeXml } from "../svg/escape";
 import { NAVY_PANEL_X, NAVY_PANEL_TOP, NAVY_PANEL_WIDTH } from "./geometry";
 import { MAX_TAKEAWAYS } from "./takeaways";
+import { SVG_FONT_FAMILY } from "../fonts";
 
 // ─── Navy KEY TAKEAWAYS Editorial Panel ──────────────────────────────────────
 // Active content panel inside the deep-navy branding section (right of the
@@ -12,7 +13,7 @@ import { MAX_TAKEAWAYS } from "./takeaways";
 // say the panel is skipped entirely so the navy block stays clean.
 
 const c = brand.colors;
-const FONT = "Arial, Helvetica, sans-serif";
+const FONT = SVG_FONT_FAMILY;
 
 const LABEL_Y = NAVY_PANEL_TOP + 38;
 const RULE_Y = LABEL_Y + 13;

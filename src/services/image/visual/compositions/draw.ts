@@ -7,6 +7,7 @@ import {
   drawCard as themeCard,
   drawPill as themePill,
 } from "../../theme/primitives";
+import { SVG_FONT_FAMILY } from "../../fonts";
 
 const c = brand.colors;
 
@@ -15,7 +16,7 @@ const c = brand.colors;
 // render in the same professional light-zone language as every template. Small
 // helpers that are specific to the content-driven compositions live here too.
 
-const FONT = "Arial, Helvetica, sans-serif";
+const FONT = SVG_FONT_FAMILY;
 
 /** Light node panel. */
 export function drawNode(x: number, y: number, w: number, h: number, label: string, opts: { accent?: boolean; sub?: string } = {}): string {

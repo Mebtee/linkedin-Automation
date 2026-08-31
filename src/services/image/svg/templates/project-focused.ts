@@ -4,6 +4,7 @@ import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
 import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPill, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
+import { SVG_FONT_FAMILY } from "../../fonts";
 
 // ─── Template: PROJECT_FOCUSED ───────────────────────────────────────────────
 // Project-forward editorial layout: a light "project" panel frames the keyword
@@ -30,7 +31,7 @@ export function renderProjectFocused(input: ImageGenerationInput, logo: LogoEmbe
     drawHeadline(cx, 262, input.headline || input.topic),
     drawSubheadline(cx, 320, input.subheadline),
     `<rect x="${panel.x}" y="${panel.y}" width="${panel.w}" height="${panel.h}" rx="16" fill="#F6F8FB" stroke="#DCE4F1" stroke-width="1" />`,
-    `<text x="${cx}" y="${panel.y + 42}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="3" fill="#5B677A">BUILD IN PROGRESS</text>`,
+    `<text x="${cx}" y="${panel.y + 42}" text-anchor="middle" font-family="${SVG_FONT_FAMILY}" font-size="14" font-weight="700" letter-spacing="3" fill="#5B677A">BUILD IN PROGRESS</text>`,
     chips,
   ].join("");
 
