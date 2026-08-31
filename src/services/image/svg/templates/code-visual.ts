@@ -2,6 +2,7 @@ import type { ImageGenerationInput } from "@/types/image";
 import { renderScaffold, closeScaffold } from "../render";
 import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
+import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
 
 // ─── Template: CODE_VISUAL ───────────────────────────────────────────────────
@@ -34,5 +35,5 @@ export function renderCodeVisual(input: ImageGenerationInput, logo: LogoEmbed | 
     barSvg,
   ].join("");
 
-  return renderScaffold(`code:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
+  return renderScaffold(`code:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));
 }

@@ -3,6 +3,7 @@ import { brand } from "@/config/brand";
 import { renderScaffold, closeScaffold } from "../render";
 import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
+import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
 
 // ─── Template: PROGRESS ──────────────────────────────────────────────────────
@@ -25,5 +26,5 @@ export function renderProgress(input: ImageGenerationInput, logo: LogoEmbed | nu
     `<text x="${bar.x}" y="${bar.y - 14}" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" letter-spacing="2" fill="${brand.colors.muted}">JOURNEY PROGRESS</text>`,
   ].join("");
 
-  return renderScaffold(`progress:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
+  return renderScaffold(`progress:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));
 }

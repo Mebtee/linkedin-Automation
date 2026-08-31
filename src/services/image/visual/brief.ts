@@ -16,6 +16,7 @@ import {
   chainToKeyPoints,
   detectTopConcepts,
 } from "./concept-chains";
+import { extractTakeaways } from "../theme/takeaways";
 
 // ─── Visual Brief Builder (Phase 5G → 5H) ───────────────────────────────────
 // Deterministically transforms a generated post + curriculum context into a
@@ -164,6 +165,20 @@ export function buildVisualBrief(ctx: BriefContext): VisualBrief {
 
   const keyPoints = extractKeyPoints(post, topic, chain?.title);
 
+  // Takeaway evidence: the full post output including the next-step line, so the
+  // navy panel can draw on the post's real vocabulary. Kept separate from
+  // `rawSource` (which steers the light-zone visual) so the two areas stay
+  // complementary and non-duplicative.
+  const takeawaySource = [
+    post.image_visual_concept || "",
+    post.image_headline || "",
+    post.opening,
+    post.body,
+    post.takeaway,
+    post.next_step,
+    topic,
+  ].join(" ");
+
   const composition = selectComposition({
     theme,
     postType,
@@ -195,6 +210,7 @@ export function buildVisualBrief(ctx: BriefContext): VisualBrief {
     recruiterSignal: recruiterSignal(post, postType),
     postType: postType ?? undefined,
     postFormat: post.format,
+    keyTakeaways: extractTakeaways(takeawaySource),
     dayNumber: post.day_number,
     module: moduleTitle,
     emphasis,

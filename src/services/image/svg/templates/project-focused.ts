@@ -2,6 +2,7 @@ import type { ImageGenerationInput } from "@/types/image";
 import { renderScaffold, closeScaffold } from "../render";
 import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
+import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPill, drawPrimaryTag, drawSubheadline } from "../../theme/primitives";
 
 // ─── Template: PROJECT_FOCUSED ───────────────────────────────────────────────
@@ -33,5 +34,5 @@ export function renderProjectFocused(input: ImageGenerationInput, logo: LogoEmbe
     chips,
   ].join("");
 
-  return renderScaffold(`project:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
+  return renderScaffold(`project:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));
 }

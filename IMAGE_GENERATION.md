@@ -297,6 +297,7 @@ deterministic SVG layers in `src/services/image/theme/`:
 |-------|--------|---------|
 | Background | `background.ts` | white/light content zone (left) + deep-navy diagonal branding block (right) + electric-blue accent line + sparse circuit decor |
 | Content | `primitives.ts` | editorial typography (tag/headline/subheadline/divider), clean technical nodes, arrows, cards, pills |
+| Takeaways | `takeaways.ts` / `takeaways-panel.ts` | active navy information panel: KEY TAKEAWAYS header + numbered items (01–04) derived from the post's own vocabulary |
 | Branding | `branding.ts` | TB logo (lower-right navy block) + footer brand mark (bottom-left) |
 | Geometry | `geometry.ts` | single source of truth for the 1600×900 layout (canvas, content zone, diagonal, logo, safe margins) |
 
@@ -309,6 +310,13 @@ Layout model (all coordinated from `geometry.ts`):
 - A 5px electric-blue diagonal accent line (a thin cyan parallel hairline) follows
   the divider; sparse deterministic circuit traces/nodes hug the boundary
   (`circuit.ts` driven by a seeded FNV-1a + mulberry32 PRNG — no `Math.random()`).
+- The navy diagonal block is an **active content area**, not an empty backdrop: a
+  KEY TAKEAWAYS editorial panel (`theme/takeaways-panel.ts`) sits above the TB
+  logo and renders 3–4 numbered items (01, 02, 03, optionally 04). Labels come
+  from a per-concept vocabulary (`theme/takeaways.ts`) that is only activated by
+  words the post literally contains — never invented, generalized, or pulled
+  from prompts/evidence metadata — and stays distinct from the light-zone visual
+  so the two areas do not duplicate. Thin/empty posts emit no panel.
 - Content safe area: ≥80px horizontal, ≥60px vertical. Text wraps automatically;
   long headlines wrap to ≤2 lines.
 - TB logo embed: `public/branding/tb-logo.png` is processed at runtime with sharp
@@ -417,6 +425,12 @@ Tests cover:
   engagement-bait, appears exactly once at the end of the published text, and
   never inside the technical body (`src/services/linkedin/cta.test.ts`,
   `src/services/linkedin/publish.test.ts`)
+- Navy KEY TAKEAWAYS panel: extraction determinism, evidence-backed labels only
+  (a proof-of-evidence helper asserts each label is triggered by a word the post
+  contains), no fabricated claims, 3–4 item cap, plural matching, long-label
+  wrapping/truncation, empty/short-post fallback, SVG escaping, navy-panel layout
+  bounds, 1600×900 canvas safety, no duplication with the light-zone visual, and
+  template/fallback integration (`src/services/image/theme/takeaways.test.ts`)
 
 ## Files
 

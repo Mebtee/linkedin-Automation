@@ -366,6 +366,6 @@ export function renderVisualBrief(brief: VisualBrief, logo: LogoEmbed | null = n
   const renderer = RENDERERS[brief.composition] ?? renderConceptFlow;
   const content = renderer(brief);
   // The shared scaffold opens the branded background and closes with the
-  // branding layer (TB logo + footer mark).
-  return renderScaffold(`brief:${brief.composition}:${brief.concept}`) + content + closeScaffold(logo);
+  // branding layer (navy KEY TAKEAWAYS panel + TB logo + footer mark).
+  return renderScaffold(`brief:${brief.composition}:${brief.concept}`) + content + closeScaffold(logo, brief.keyTakeaways);
 }

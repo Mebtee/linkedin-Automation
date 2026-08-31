@@ -52,6 +52,12 @@ export const LOGO = { x: 1280, y: 624, width: 200, height: 200 } as const;
 export const SIGNAL_TAG_X = CANVAS_W - 86;
 export const SIGNAL_TAG_Y = 128;
 
+/** KEY TAKEAWAYS editorial panel — right of the diagonal, above the TB logo. */
+export const NAVY_PANEL_X = 1092;
+export const NAVY_PANEL_TOP = 232;
+/** Panel left-to-right extent, keeping the standard ≥80px horizontal safe margin. */
+export const NAVY_PANEL_WIDTH = CANVAS_W - NAVY_PANEL_X - 80;
+
 /** Footer brand mark (bottom-left of the light zone). */
 export const FOOTER_X = LIGHT_LEFT;
 export const FOOTER_LINE1_Y = CANVAS_H - 66;

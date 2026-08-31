@@ -2,6 +2,7 @@ import type { ImageGenerationInput } from "@/types/image";
 import { renderScaffold, closeScaffold } from "../render";
 import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
+import { takeawaysFromInput } from "../../theme/takeaways";
 import {
   drawArrow,
   drawHeadline,
@@ -38,5 +39,5 @@ export function renderConceptDiagram(input: ImageGenerationInput, logo: LogoEmbe
     cols,
   ].join("");
 
-  return renderScaffold(`diagram:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
+  return renderScaffold(`diagram:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));
 }

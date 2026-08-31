@@ -113,7 +113,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["testing", "test", "vitest", "jest"],
+    match: ["testing", "test", "tests", "unit test", "vitest", "jest"],
     chain: {
       title: "Testing",
       nodes: ["CODE", "TESTS", "VALIDATION", "CONFIDENCE"],
@@ -154,7 +154,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["function", "recursion", "closure", "scope"],
+    match: ["function", "functions", "recursion", "recursive", "closure", "closures", "scope", "scopes"],
     chain: {
       title: "Functions & Scope",
       nodes: ["INPUT", "FUNCTION", "OUTPUT"],
@@ -162,7 +162,7 @@ const CHAIN_RULES: readonly ChainRule[] = [
     },
   },
   {
-    match: ["array", "list", "data structure", "tree", "hash map"],
+    match: ["array", "arrays", "list", "lists", "data structure", "data structures", "tree", "trees", "hash map", "hash maps"],
     chain: {
       title: "Data Structures",
       nodes: ["COLLECTION", "OPERATION", "RESULT"],

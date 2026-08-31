@@ -111,6 +111,12 @@ export interface VisualBrief {
   readonly emphasis?: RecruiterEmphasis;
   /** Post format (Phase 3B journal-content taxonomy) when known. */
   readonly postFormat?: string;
+  /**
+   * 3–4 concise editorial takeaways derived deterministically from the post's
+   * own content (Phase 5J). Drives the navy "KEY TAKEAWAYS" panel. Never
+   * invented; empty for thin/empty posts (panel skipped).
+   */
+  readonly keyTakeaways?: readonly string[];
 }
 
 // ─── Image Generation Input ─────────────────────────────────────────────────
@@ -125,6 +131,12 @@ export interface ImageGenerationInput {
   readonly keywords: readonly string[];
   readonly visualConcept: string;
   readonly template: ImageTemplate;
+  /**
+   * Optional concise editorial takeaways (Phase 5J) used by the classic template
+   * path for the navy "KEY TAKEAWAYS" panel. When omitted, templates derive them
+   * deterministically from the flat input fields.
+   */
+  readonly takeaways?: readonly string[];
   /**
    * Optional structured visual brief (Phase 5G). When present, the provider
    * prefers the content-driven composition renderer; otherwise it falls back

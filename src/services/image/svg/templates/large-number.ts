@@ -3,6 +3,7 @@ import { brand } from "@/config/brand";
 import { renderScaffold, closeScaffold } from "../render";
 import type { LogoEmbed } from "../../logo";
 import { LIGHT_CX } from "../../theme/geometry";
+import { takeawaysFromInput } from "../../theme/takeaways";
 import { drawHeadline, drawPrimaryTag, drawSubheadline, drawPill } from "../../theme/primitives";
 
 // ─── Template: LARGE_NUMBER ─────────────────────────────────────────────────
@@ -39,5 +40,5 @@ export function renderLargeNumber(input: ImageGenerationInput, logo: LogoEmbed |
     chips,
   ].join("");
 
-  return renderScaffold(`template:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo);
+  return renderScaffold(`template:${input.topic}:${input.dayNumber}`) + content + closeScaffold(logo, takeawaysFromInput(input));
 }
