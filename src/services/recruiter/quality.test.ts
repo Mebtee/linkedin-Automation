@@ -273,6 +273,12 @@ describe("publish recommendation thresholds", () => {
     expect(buildQualityResult(dims(64), { hasCriticalWarning: false }).publishRecommendation).toBe("needs_review");
   });
 
+  it("a sub-threshold score is do_not_publish even with zero warnings", () => {
+    const result = buildQualityResult(dims(50), { hasCriticalWarning: false });
+    expect(result.totalScore).toBe(50);
+    expect(result.publishRecommendation).toBe("do_not_publish");
+  });
+
   it("is weighted by the config: weights sum to 100 and drive the total", () => {
     const weights = recruiterQuality.weights;
     const sum = RECRUITER_QUALITY_DIMENSIONS.reduce((acc, d) => acc + weights[d], 0);
@@ -314,6 +320,26 @@ describe("evaluateApproveGate", () => {
     if (!gate.allowed) {
       expect(gate.code).toBe("QUALITY_GATE_BLOCKED");
       expect(gate.message).toContain("unsupported achievement claim");
+    }
+  });
+
+  it("blocks a score-driven do_not_publish report (no critical warning) with the fallback message", () => {
+    const lowScore = {
+      score: 50,
+      recommendation: "do_not_publish" as const,
+      dimensions: Object.fromEntries(
+        RECRUITER_QUALITY_DIMENSIONS.map((d) => [d, 50]),
+      ) as Record<(typeof RECRUITER_QUALITY_DIMENSIONS)[number], number>,
+      strengths: [],
+      improvements: [],
+      warnings: [],
+      evaluatedAt: "2026-08-28T00:00:00Z",
+    };
+    const gate = evaluateApproveGate(lowScore);
+    expect(gate.allowed).toBe(false);
+    if (!gate.allowed) {
+      expect(gate.code).toBe("QUALITY_GATE_BLOCKED");
+      expect(gate.message).toBe("This post is not ready to approve.");
     }
   });
 });

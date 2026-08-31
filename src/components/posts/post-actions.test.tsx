@@ -173,7 +173,7 @@ describe("PostActions", () => {
     expect(btn).toHaveProperty("disabled", true);
   });
 
-  it("blocks the approve button when the quality gate disallows approval", () => {
+  it("blocks the approve button and shows the exact quality-gate message", () => {
     render(
       <PostActions
         {...defaultProps}
@@ -184,7 +184,9 @@ describe("PostActions", () => {
     const approve = screen.getByText("Approve Post");
     expect(approve).toHaveProperty("disabled", true);
     expect(
-      screen.getByText(/This draft is not approved for publishing/),
+      screen.getByText(
+        "This draft is not approved for publishing. Fix the issues in the quality review, or regenerate a new draft.",
+      ),
     ).toBeDefined();
   });
 

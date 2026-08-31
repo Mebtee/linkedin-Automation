@@ -285,6 +285,48 @@ describe("Post Server Actions", () => {
       expect(changeGeneratedPostStatus).not.toHaveBeenCalled();
     });
 
+    it("blocks approval when re-evaluated quality is do_not_publish by score alone (no critical warning)", async () => {
+      const lowScoreReport = {
+        score: 50,
+        recommendation: "do_not_publish" as const,
+        dimensions: {
+          recruiterRelevance: 50,
+          evidenceStrength: 45,
+          technicalDepth: 40,
+          practicalExperience: 20,
+          problemSolving: 50,
+          clarity: 70,
+          authenticity: 70,
+          learningGrowth: 50,
+        },
+        strengths: [],
+        improvements: [],
+        warnings: [],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      };
+      const opportunityPost = {
+        ...mockPost,
+        opportunity_id: "op-1",
+        recruiter_quality_score: 50,
+        recruiter_quality_report: lowScoreReport,
+      };
+      (getGeneratedPost as Mock).mockResolvedValue(opportunityPost);
+
+      const qualityService = await import("@/services/recruiter/quality-service");
+      vi.mocked(annotateGeneratedPostQuality).mockResolvedValue(opportunityPost);
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue({ post: opportunityPost, report: lowScoreReport });
+
+      const result = await approvePost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("QUALITY_GATE_BLOCKED");
+        expect(result.error.message).toBe("This post is not ready to approve.");
+      }
+      expect(changeGeneratedPostStatus).not.toHaveBeenCalled();
+    });
+
     it("syncs the linked opportunity to approved when an opportunity post is approved", async () => {
       const opportunityPost = { ...mockPost, status: "generated" as const, opportunity_id: "op-1" };
       const approvedPost = { ...opportunityPost, status: "approved" as const };
@@ -641,6 +683,48 @@ describe("Post Server Actions", () => {
       const qualityService = await import("@/services/recruiter/quality-service");
       const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
       evaluateSpy.mockResolvedValue({ post: approvedPost, report: doNotPublishReport });
+
+      const result = await publishPost("post-1");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe("QUALITY_GATE_BLOCKED");
+      }
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(publishToLinkedIn).not.toHaveBeenCalled();
+    });
+
+    it("blocks publishing an approved post whose re-evaluated quality is do_not_publish by score alone", async () => {
+      const lowScoreReport = {
+        score: 49,
+        recommendation: "do_not_publish" as const,
+        dimensions: {
+          recruiterRelevance: 50,
+          evidenceStrength: 45,
+          technicalDepth: 40,
+          practicalExperience: 20,
+          problemSolving: 50,
+          clarity: 70,
+          authenticity: 70,
+          learningGrowth: 50,
+        },
+        strengths: [],
+        improvements: [],
+        warnings: [],
+        evaluatedAt: "2026-08-28T10:00:00Z",
+      };
+      const approvedPost = {
+        ...mockPost,
+        status: "approved" as const,
+        opportunity_id: "op-1",
+        recruiter_quality_score: 49,
+        recruiter_quality_report: lowScoreReport,
+      };
+      (getGeneratedPost as Mock).mockResolvedValue(approvedPost);
+
+      const qualityService = await import("@/services/recruiter/quality-service");
+      const evaluateSpy = vi.spyOn(qualityService, "evaluateRecruiterPostForSavedPost");
+      evaluateSpy.mockResolvedValue({ post: approvedPost, report: lowScoreReport });
 
       const result = await publishPost("post-1");
 
