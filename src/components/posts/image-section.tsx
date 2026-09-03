@@ -21,6 +21,7 @@ const TEMPLATE_LABELS: Record<ImageTemplate, string> = {
   "project-focused": "Project Focused",
   "progress": "Progress",
   "final-milestone": "Final Milestone",
+  "gemini-image": "AI Image",
 };
 
 export function ImageSection({ post }: ImageSectionProps) {
@@ -57,14 +58,14 @@ export function ImageSection({ post }: ImageSectionProps) {
     return () => { cancelled = true; };
   }, [post.id]);
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (provider?: "gemini-image" | "branded-svg") => {
     if (isGenerating) return;
     setIsGenerating(true);
     try {
-      const result = await generatePostImageAction(post.id);
+      const result = await generatePostImageAction(post.id, provider);
       if (result.success) {
         setAsset(result.asset);
-        showToast("success", "Image generated successfully.");
+        showToast("success", provider === "gemini-image" ? "AI image generated successfully." : "Image generated successfully.");
       } else {
         showToast("error", result.error.message);
       }
@@ -80,7 +81,8 @@ export function ImageSection({ post }: ImageSectionProps) {
     setIsGenerating(true);
     try {
       const template = selectedTemplate || undefined;
-      const result = await regeneratePostImageAction(post.id, template as ImageTemplate | undefined);
+      const provider = asset?.template === "gemini-image" ? "gemini-image" : undefined;
+      const result = await regeneratePostImageAction(post.id, template as ImageTemplate | undefined, provider);
       if (result.success) {
         setAsset(result.asset);
         showToast("success", "Image regenerated successfully.");
@@ -92,19 +94,19 @@ export function ImageSection({ post }: ImageSectionProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, post.id, selectedTemplate, showToast]);
+  }, [isGenerating, post.id, selectedTemplate, asset, showToast]);
 
   const handleDownload = useCallback(() => {
     if (!asset) return;
-    // Fetch the SVG content via the authenticated image route and trigger a download
+    // Fetch the image via the authenticated route and trigger a download.
     fetch(`/api/media/${post.id}/image`)
-      .then((res) => res.text())
-      .then((svg) => {
-        const blob = new Blob([svg], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(blob);
+      .then(async (res) => {
+        const isPng = asset.mime_type === "image/png";
+        const data = isPng ? await res.blob() : new Blob([await res.text()], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(data);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `day-${post.day_number}-image.svg`;
+        a.download = `day-${post.day_number}-image.${isPng ? "png" : "svg"}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -169,41 +171,53 @@ export function ImageSection({ post }: ImageSectionProps) {
         </p>
       )}
 
-      {/* Template selector */}
-      <div className="mt-3">
-        <label
-          htmlFor="image-template"
-          className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
-        >
-          Template
-        </label>
-        <select
-          id="image-template"
-          value={selectedTemplate}
-          onChange={(e) => setSelectedTemplate(e.target.value as ImageTemplate | "")}
-          disabled={isGenerating}
-          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
-        >
-          <option value="">Auto-select</option>
-          {IMAGE_TEMPLATES.map((t) => (
-            <option key={t} value={t}>
-              {TEMPLATE_LABELS[t]}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Template selector (only for SVG templates, not AI/PNG images) */}
+      {(!asset || asset.template !== "gemini-image") && (
+        <div className="mt-3">
+          <label
+            htmlFor="image-template"
+            className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
+          >
+            Template
+          </label>
+          <select
+            id="image-template"
+            value={selectedTemplate}
+            onChange={(e) => setSelectedTemplate(e.target.value as ImageTemplate | "")}
+            disabled={isGenerating}
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
+          >
+            <option value="">Auto-select</option>
+            {IMAGE_TEMPLATES.filter((t) => t !== "gemini-image").map((t) => (
+              <option key={t} value={t}>
+                {TEMPLATE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="mt-3 flex flex-wrap gap-2">
         {!asset ? (
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isGenerating ? "Generating..." : "Generate Image"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => handleGenerate()}
+              disabled={isGenerating}
+              className="rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isGenerating ? "Generating..." : "Generate Image"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleGenerate("gemini-image")}
+              disabled={isGenerating}
+              className="rounded-lg border border-[#2563EB] bg-white px-3 py-1.5 text-xs font-medium text-[#2563EB] hover:bg-[#eff6ff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#2563EB] dark:bg-zinc-900 dark:text-[#60a5fa] dark:hover:bg-zinc-800"
+            >
+              {isGenerating ? "Generating..." : "Generate AI Image"}
+            </button>
+          </>
         ) : (
           <>
             <button

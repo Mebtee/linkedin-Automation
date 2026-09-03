@@ -20,13 +20,15 @@ export type ImageGetResult =
 // ─── Server Actions ──────────────────────────────────────────────────────────
 
 /**
- * Generates a branded image for a generated post.
+ * Generates an image for a generated post using the active provider, or the
+ * requested provider override ("gemini-image" for the AI provider).
  */
 export async function generatePostImageAction(
   postId: string,
+  provider?: "gemini-image" | "branded-svg",
 ): Promise<ImageActionResult> {
   try {
-    const asset = await generatePostImage(postId);
+    const asset = await generatePostImage(postId, provider);
     return { success: true, asset };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to generate image.";
@@ -38,14 +40,16 @@ export async function generatePostImageAction(
 }
 
 /**
- * Regenerates an image for a post with an optional template override.
+ * Regenerates an image for a post with an optional template override and
+ * optional provider override.
  */
 export async function regeneratePostImageAction(
   postId: string,
   template?: ImageTemplate,
+  provider?: "gemini-image" | "branded-svg",
 ): Promise<ImageActionResult> {
   try {
-    const asset = await regeneratePostImage(postId, template);
+    const asset = await regeneratePostImage(postId, template, provider);
     return { success: true, asset };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to regenerate image.";

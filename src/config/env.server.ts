@@ -11,6 +11,7 @@ import { assertNonEmptyString } from "@/services/validation";
 const SERVER_ENV_VARS = {
   supabaseServiceRoleKey: "SUPABASE_SERVICE_ROLE_KEY",
   aiTextProvider: "AI_TEXT_PROVIDER",
+  aiImageProvider: "AI_IMAGE_PROVIDER",
   geminiApiKey: "GEMINI_API_KEY",
   linkedinClientId: "LINKEDIN_CLIENT_ID",
   linkedinClientSecret: "LINKEDIN_CLIENT_SECRET",
@@ -28,6 +29,7 @@ function read(name: string): string | undefined {
 export const serverEnv = {
   supabaseServiceRoleKey: read(SERVER_ENV_VARS.supabaseServiceRoleKey),
   aiTextProvider: read(SERVER_ENV_VARS.aiTextProvider),
+  aiImageProvider: read(SERVER_ENV_VARS.aiImageProvider),
   geminiApiKey: read(SERVER_ENV_VARS.geminiApiKey),
   linkedinClientId: read(SERVER_ENV_VARS.linkedinClientId),
   linkedinClientSecret: read(SERVER_ENV_VARS.linkedinClientSecret),

@@ -6,8 +6,8 @@ import {
 } from "./index";
 
 describe("Image Provider Factory", () => {
-  it("returns a provider by default", () => {
-    const provider = getImageGenerationProvider();
+  it("returns a provider by default", async () => {
+    const provider = await getImageGenerationProvider();
     expect(provider).toBeDefined();
     expect(typeof provider.generateImage).toBe("function");
   });
@@ -22,10 +22,10 @@ describe("Image Provider Factory", () => {
     expect(providers).toContain("branded-svg");
   });
 
-  it("throws for unknown provider name", () => {
+  it("throws for unknown provider name", async () => {
     process.env.AI_IMAGE_PROVIDER = "nonexistent";
     try {
-      expect(() => getImageGenerationProvider()).toThrow("Unknown image provider");
+      await expect(getImageGenerationProvider()).rejects.toThrow("Unknown image provider");
     } finally {
       delete process.env.AI_IMAGE_PROVIDER;
     }

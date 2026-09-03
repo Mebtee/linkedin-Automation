@@ -429,8 +429,8 @@ describe("anti-hallucination", () => {
     });
     // Invalid brief degraded to the classic template path; the claimed metric
     // never reaches the image.
-    expect(result.svg).not.toContain("10,000");
-    expect(result.svg).not.toContain("users");
-    expect(checkSvgSafety(result.svg)).toBeNull();
+    expect(result.svg!).not.toContain("10,000");
+    expect(result.svg!).not.toContain("users");
+    expect(checkSvgSafety(result.svg!)).toBeNull();
   });
 });

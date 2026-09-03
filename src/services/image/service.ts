@@ -176,6 +176,7 @@ function generateAltText(dayNumber: number, topic: string): string {
  */
 export async function generatePostImage(
   postId: string,
+  requestedProvider?: "gemini-image" | "branded-svg",
   requestedTemplate?: ImageTemplate,
 ): Promise<MediaAssetRow> {
   const supabase = await createClient();
@@ -203,8 +204,8 @@ export async function generatePostImage(
   // Validate input
   const validatedInput = validateImageInput(finalInput);
 
-  // Generate SVG
-  const provider = getImageGenerationProvider();
+  // Generate image via the active (or overridden) provider
+  const provider = await getImageGenerationProvider(requestedProvider);
   let result: ImageProviderResult;
   try {
     result = await provider.generateImage(validatedInput);
@@ -222,12 +223,29 @@ export async function generatePostImage(
     await supabase.from("media_assets").delete().eq("id", existing.id);
   }
 
-  // Upload to Supabase Storage
-  const storagePath = `${user.id}/${postId}/image.svg`;
+  // Determine output format from the provider result (SVG or raster PNG).
+  const isPng = result.mimeType === "image/png";
+  const svgText = result.svg ?? "";
+  if (!isPng && svgText.length === 0) {
+    throw new AppError("Image provider returned no SVG content.", {
+      code: "IMAGE_GENERATION_FAILED",
+    });
+  }
+  if (isPng && (!result.png || result.png.byteLength === 0)) {
+    throw new AppError("Image provider returned no image bytes.", {
+      code: "IMAGE_GENERATION_FAILED",
+    });
+  }
+
+  // Upload to Supabase Storage. SVG is uploaded as a string (matching the legacy
+  // path); PNG is uploaded as raw bytes.
+  const ext = isPng ? "png" : "svg";
+  const storagePath = `${user.id}/${postId}/image.${ext}`;
+  const uploadBody: string | Uint8Array = isPng ? result.png! : svgText;
   const { error: uploadError } = await supabase.storage
     .from("post-images")
-    .upload(storagePath, result.svg, {
-      contentType: "image/svg+xml",
+    .upload(storagePath, uploadBody, {
+      contentType: result.mimeType,
       upsert: true,
     });
 
@@ -248,7 +266,7 @@ export async function generatePostImage(
     generated_post_id: postId,
     storage_path: storagePath,
     storage_url: storageUrl,
-    mime_type: "image/svg+xml",
+    mime_type: result.mimeType,
     width: result.width,
     height: result.height,
     template: result.template,
@@ -321,6 +339,7 @@ export async function getPostImage(
 export async function regeneratePostImage(
   postId: string,
   template?: ImageTemplate,
+  provider?: "gemini-image" | "branded-svg",
 ): Promise<MediaAssetRow> {
-  return generatePostImage(postId, template);
+  return generatePostImage(postId, provider, template);
 }

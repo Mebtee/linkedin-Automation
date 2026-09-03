@@ -110,8 +110,8 @@ describe("BrandedSvgProvider", () => {
     };
     const result = await provider.generateImage(invalidBrief);
     // The invalid brief is rejected (unsupported metric) → classic template.
-    expect(result.svg).toContain("105 DAYS OF FULL-STACK DEVELOPMENT");
-    expect(result.svg).not.toContain("10,000");
-    expect(checkSvgSafety(result.svg)).toBeNull();
+    expect(result.svg!).toContain("105 DAYS OF FULL-STACK DEVELOPMENT");
+    expect(result.svg!).not.toContain("10,000");
+    expect(checkSvgSafety(result.svg!)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { AppError } from "@/lib/utils/errors";
 import type { ImageGenerationInput, VisualBrief } from "@/types/image";
-import { RECRUITER_EMPHASES } from "@/types/image";
+import { IMAGE_TEMPLATES, RECRUITER_EMPHASES } from "@/types/image";
 
 // ─── Input Validation ───────────────────────────────────────────────────────
 
@@ -43,8 +43,8 @@ export function validateImageInput(input: unknown): ImageGenerationInput {
     throw new ImageValidationError("visualConcept must be a string", "IMAGE_INVALID_INPUT");
   }
 
-  if (typeof obj.template !== "string" || obj.template.trim() === "") {
-    throw new ImageValidationError("template must be a non-empty string", "IMAGE_INVALID_INPUT");
+  if (typeof obj.template !== "string" || !IMAGE_TEMPLATES.includes(obj.template as ImageGenerationInput["template"])) {
+    throw new ImageValidationError("template must be a valid image template", "IMAGE_INVALID_INPUT");
   }
 
   // Optional structured brief (Phase 5G). Validated only when present so the
@@ -176,6 +176,33 @@ export function validateVisualBrief(brief: VisualBrief): string[] {
   }
 
   return issues;
+}
+
+// ─── PNG Output Validation (Gemini provider) ────────────────────────────────
+
+/** Magic bytes for PNG images. */
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+const MAX_PNG_BYTES = 8 * 1024 * 1024; // 8MB
+
+/**
+ * Validates raster PNG output (from the Gemini provider). Checks signature,
+ * size floor and size ceiling. Throws ImageValidationError on failure so the
+ * provider can fall back to the SVG pipeline.
+ */
+export function validatePngOutput(bytes: Uint8Array): Uint8Array {
+  if (!bytes || bytes.byteLength < PNG_SIGNATURE.length) {
+    throw new ImageValidationError("PNG output is too small", "IMAGE_INVALID_OUTPUT");
+  }
+  for (let i = 0; i < PNG_SIGNATURE.length; i += 1) {
+    if (bytes[i] !== PNG_SIGNATURE[i]) {
+      throw new ImageValidationError("Output is not a valid PNG", "IMAGE_INVALID_OUTPUT");
+    }
+  }
+  if (bytes.byteLength > MAX_PNG_BYTES) {
+    throw new ImageValidationError("PNG output exceeds 8MB limit", "IMAGE_INVALID_OUTPUT");
+  }
+  return bytes;
 }
 
 // ─── Image Validation Error ─────────────────────────────────────────────────

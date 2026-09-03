@@ -4,19 +4,31 @@ import { BrandedSvgProvider } from "./providers/branded-svg";
 export type { ImageGenerationProvider } from "@/types/image";
 
 // ─── Provider Registry ──────────────────────────────────────────────────────
+// The Gemini image provider is loaded lazily (dynamic import) so that importing
+// this module in test/client environments never pulls in the "server-only"
+// env module. Only constructing the gemini-image provider triggers that import.
 
-const providers = new Map<string, () => ImageGenerationProvider>([
-  ["branded-svg", () => new BrandedSvgProvider()],
+type ProviderFactory = () => Promise<ImageGenerationProvider>;
+
+const providers = new Map<string, ProviderFactory>([
+  ["branded-svg", async () => new BrandedSvgProvider()],
+  ["gemini-image", async () => {
+    const { GeminiImageProvider } = await import("./providers/gemini-image");
+    return new GeminiImageProvider();
+  }],
 ]);
 
 // ─── Provider Factory ───────────────────────────────────────────────────────
 
 /**
  * Returns an ImageGenerationProvider based on the AI_IMAGE_PROVIDER environment
- * variable. Defaults to "branded-svg" if the variable is unset or invalid.
+ * variable (or the provided override). Defaults to "branded-svg" if the variable
+ * is unset or invalid.
  */
-export function getImageGenerationProvider(): ImageGenerationProvider {
-  const providerName = getProviderName();
+export async function getImageGenerationProvider(
+  override?: "gemini-image" | "branded-svg",
+): Promise<ImageGenerationProvider> {
+  const providerName = override?.trim().toLowerCase() || getProviderName();
   const factory = providers.get(providerName);
 
   if (!factory) {

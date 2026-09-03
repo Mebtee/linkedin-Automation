@@ -58,6 +58,7 @@ export class BrandedSvgProvider implements ImageGenerationProvider {
 
     return {
       svg,
+      mimeType: "image/svg+xml",
       width: brand.image.width,
       height: brand.image.height,
       template: input.template,

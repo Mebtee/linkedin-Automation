@@ -6,7 +6,8 @@ export type ImageTemplate =
   | "concept-diagram"
   | "project-focused"
   | "progress"
-  | "final-milestone";
+  | "final-milestone"
+  | "gemini-image";
 
 export const IMAGE_TEMPLATES: readonly ImageTemplate[] = [
   "large-number",
@@ -15,6 +16,7 @@ export const IMAGE_TEMPLATES: readonly ImageTemplate[] = [
   "project-focused",
   "progress",
   "final-milestone",
+  "gemini-image",
 ] as const;
 
 // ─── Visual Theme & Composition (Phase 5G) ───────────────────────────────────
@@ -149,7 +151,12 @@ export interface ImageGenerationInput {
 // ─── Image Provider Result ──────────────────────────────────────────────────
 
 export interface ImageProviderResult {
-  readonly svg: string;
+  /** SVG output (used by the brand provider and the gifted fallback path). */
+  readonly svg?: string;
+  /** Raster output — final PNG bytes (used by the Gemini provider). */
+  readonly png?: Uint8Array;
+  /** MIME type of the produced image: "image/svg+xml" or "image/png". */
+  readonly mimeType: string;
   readonly width: number;
   readonly height: number;
   readonly template: ImageTemplate;
