@@ -5,8 +5,13 @@ import {
   cancelSchedule,
   reschedulePost,
   getActiveSchedule,
+  listUserSchedules,
 } from "@/services/scheduling";
-import type { ScheduledPostRow, ScheduleActionResult } from "@/types/schedule";
+import type {
+  ScheduledPostRow,
+  ScheduleActionResult,
+  ScheduleWithPost,
+} from "@/types/schedule";
 
 // ─── Schedule Post ──────────────────────────────────────────────────────────
 
@@ -78,6 +83,26 @@ export async function getActiveScheduleAction(
       err instanceof Error && "code" in err
         ? (err as { code: string }).code
         : "UNKNOWN";
+    return { success: false, error: { code, message } };
+  }
+}
+
+// ─── List Schedules ──────────────────────────────────────────────────────────
+
+export type ListSchedulesActionResult =
+  | { readonly success: true; readonly schedules: ScheduleWithPost[] }
+  | { readonly success: false; readonly error: { readonly code: string; readonly message: string } };
+
+export async function listSchedulesAction(): Promise<ListSchedulesActionResult> {
+  try {
+    const schedules = await listUserSchedules();
+    return { success: true, schedules };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to list schedules.";
+    const code =
+      err instanceof Error && "code" in err
+        ? (err as { code: string }).code
+        : "LIST_FAILED";
     return { success: false, error: { code, message } };
   }
 }
