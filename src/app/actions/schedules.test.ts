@@ -6,6 +6,7 @@ vi.mock("@/services/scheduling", () => ({
   cancelSchedule: vi.fn(),
   reschedulePost: vi.fn(),
   getActiveSchedule: vi.fn(),
+  listUserSchedules: vi.fn(),
 }));
 
 import {
@@ -13,14 +14,16 @@ import {
   cancelScheduleAction,
   reschedulePostAction,
   getActiveScheduleAction,
+  listSchedulesAction,
 } from "@/app/actions/schedules";
 import {
   schedulePost,
   cancelSchedule,
   reschedulePost,
   getActiveSchedule,
+  listUserSchedules,
 } from "@/services/scheduling";
-import type { ScheduledPostRow } from "@/types/schedule";
+import type { ScheduledPostRow, ScheduleWithPost } from "@/types/schedule";
 
 const mockSchedule: ScheduledPostRow = {
   id: "sched-1",
@@ -145,6 +148,65 @@ describe("getActiveScheduleAction", () => {
     if (!result.success) {
       expect(result.error.message).toBe("Connection refused");
       expect(result.error.code).toBe("UNKNOWN");
+    }
+  });
+});
+
+describe("listSchedulesAction", () => {
+  it("returns success with schedules", async () => {
+    const withPost: ScheduleWithPost = {
+      ...mockSchedule,
+      post: {
+        id: "post-1",
+        day_number: 12,
+        opening: "Built a REST API",
+        status: "approved",
+      },
+    };
+    (listUserSchedules as Mock).mockResolvedValue([withPost]);
+
+    const result = await listSchedulesAction();
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.schedules).toHaveLength(1);
+      expect(result.schedules[0]).toEqual(withPost);
+    }
+    expect(listUserSchedules).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns success with empty list", async () => {
+    (listUserSchedules as Mock).mockResolvedValue([]);
+
+    const result = await listSchedulesAction();
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.schedules).toEqual([]);
+    }
+  });
+
+  it("returns error on failure with default code", async () => {
+    (listUserSchedules as Mock).mockRejectedValue(new Error("DB unavailable"));
+    const result = await listSchedulesAction();
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toBe("DB unavailable");
+      expect(result.error.code).toBe("LIST_FAILED");
+    }
+  });
+
+  it("preserves a known error code on failure", async () => {
+    const err = new Error("Auth required") as Error & { code: string };
+    err.code = "AUTH_REQUIRED";
+    (listUserSchedules as Mock).mockRejectedValue(err);
+
+    const result = await listSchedulesAction();
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("AUTH_REQUIRED");
     }
   });
 });
