@@ -1,3 +1,5 @@
+import type { GeneratedPostStatus } from "@/types/generated-post";
+
 // ─── Schedule Status ──────────────────────────────────────────────────────────
 
 export type ScheduleStatus =
@@ -64,3 +66,14 @@ export type CreateScheduleInput = {
 export type ScheduleActionResult =
   | { readonly success: true; readonly schedule: ScheduledPostRow }
   | { readonly success: false; readonly error: { readonly code: string; readonly message: string } };
+
+// ─── Enriched Type (Schedule + linked post) ──────────────────────────────────
+
+export type ScheduleWithPost = ScheduledPostRow & {
+  readonly post: {
+    readonly id: string;
+    readonly day_number: number;
+    readonly opening: string;
+    readonly status: GeneratedPostStatus;
+  } | null;
+};
