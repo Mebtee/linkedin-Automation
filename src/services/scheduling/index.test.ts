@@ -27,6 +27,7 @@ import {
   markSchedulePublished,
   markScheduleFailed,
   loadPostForPublishing,
+  listUserSchedules,
 } from "./index";
 import { createClient } from "@/lib/supabase/server";
 import { canTransition } from "@/types/schedule";
@@ -96,6 +97,7 @@ function buildChain(result: Result): QueryChain {
     "order",
     "limit",
     "lte",
+    "in",
   ]) {
     chain[name] = vi.fn().mockReturnValue(chain);
   }
@@ -582,6 +584,126 @@ describe("markScheduleFailed", () => {
     await expect(
       markScheduleFailed(asAdmin(adminSupabase), "sched-1", "Some error"),
     ).rejects.toThrow("Failed to mark schedule as failed");
+  });
+});
+
+describe("listUserSchedules", () => {
+  let mock: ReturnType<typeof buildSupabase>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns schedules merged with their linked posts", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [
+        ok([makeSchedule({ id: "sched-1", post_id: "post-1" })]),
+      ],
+      generated_posts: [
+        ok([
+          {
+            id: "post-1",
+            day_number: 12,
+            opening: "Built a REST API with authentication",
+            status: "approved",
+          },
+        ]),
+      ],
+    });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    const result = await listUserSchedules();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe("sched-1");
+    expect(result[0]?.post).toEqual({
+      id: "post-1",
+      day_number: 12,
+      opening: "Built a REST API with authentication",
+      status: "approved",
+    });
+    expect(mock.from).toHaveBeenCalledWith("scheduled_posts");
+    expect(mock.from).toHaveBeenCalledWith("generated_posts");
+  });
+
+  it("returns empty array when nothing is scheduled", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [ok([])],
+      generated_posts: [],
+    });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    const result = await listUserSchedules();
+
+    expect(result).toEqual([]);
+    expect(mock.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a schedule whose post is missing (defensive)", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [ok([makeSchedule({ id: "sched-1" })])],
+      generated_posts: [ok([])],
+    });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    const result = await listUserSchedules();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.post).toBeNull();
+  });
+
+  it("throws when the schedule query fails", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [dbError("DB down")],
+      generated_posts: [],
+    });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    await expect(listUserSchedules()).rejects.toThrow(
+      "Failed to fetch scheduled posts",
+    );
+  });
+
+  it("throws when the post query fails", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [ok([makeSchedule({ id: "sched-1" })])],
+      generated_posts: [dbError("DB down")],
+    });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    await expect(listUserSchedules()).rejects.toThrow(
+      "Failed to fetch scheduled post details",
+    );
+  });
+
+  it("throws when not authenticated", async () => {
+    mock = buildSupabase({
+      scheduled_posts: [],
+      generated_posts: [],
+    });
+    mock.getUser.mockResolvedValue({ data: { user: null } });
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    await expect(listUserSchedules()).rejects.toThrow(
+      "Authentication required",
+    );
+  });
+
+  it("orders newest scheduled_at first and applies the limit", async () => {
+    const chain = buildChain(ok([]));
+    mock = buildSupabase({
+      scheduled_posts: [],
+      generated_posts: [],
+    });
+    mock.from.mockReturnValue(chain);
+    (createClient as Mock).mockResolvedValue(mock.supabase);
+
+    await listUserSchedules(25);
+
+    expect(chain.order).toHaveBeenCalledWith("scheduled_at", {
+      ascending: false,
+    });
+    expect(chain.limit).toHaveBeenCalledWith(25);
   });
 });
 
