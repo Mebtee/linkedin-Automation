@@ -9,7 +9,9 @@ import {
   canTransition,
   type ScheduledPostRow,
   type CreateScheduleInput,
+  type ScheduleWithPost,
 } from "@/types/schedule";
+import type { GeneratedPostStatus } from "@/types/generated-post";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -250,6 +252,65 @@ export async function getActiveSchedule(
     .maybeSingle();
 
   return (data as ScheduledPostRow) ?? null;
+}
+
+// ─── List User Schedules ─────────────────────────────────────────────────────
+
+/**
+ * Lists the authenticated user's schedules (newest first), each joined with
+ * the linked generated post's display fields. Two queries total — no N+1.
+ */
+export async function listUserSchedules(
+  limit = 100,
+): Promise<ScheduleWithPost[]> {
+  const supabase = await createClient();
+  const user = await requireAuth(supabase);
+
+  const { data: schedules, error: scheduleError } = await supabase
+    .from("scheduled_posts")
+    .select("*")
+    .eq("profile_id", user.id)
+    .order("scheduled_at", { ascending: false })
+    .limit(limit);
+
+  if (scheduleError) {
+    throw new AppError("Failed to fetch scheduled posts.", {
+      code: "DATABASE_ERROR",
+      cause: scheduleError,
+    });
+  }
+
+  const rows = (schedules ?? []) as ScheduledPostRow[];
+  if (rows.length === 0) return [];
+
+  const postIds = rows.map((schedule) => schedule.post_id);
+  const { data: posts, error: postError } = await supabase
+    .from("generated_posts")
+    .select("id, day_number, opening, status")
+    .in("id", postIds);
+
+  if (postError) {
+    throw new AppError("Failed to fetch scheduled post details.", {
+      code: "DATABASE_ERROR",
+      cause: postError,
+    });
+  }
+
+  type PostProjection = {
+    id: string;
+    day_number: number;
+    opening: string;
+    status: GeneratedPostStatus;
+  };
+  const postMap = new Map<string, PostProjection>();
+  for (const post of (posts ?? []) as PostProjection[]) {
+    postMap.set(post.id, post);
+  }
+
+  return rows.map<ScheduleWithPost>((schedule) => ({
+    ...schedule,
+    post: postMap.get(schedule.post_id) ?? null,
+  }));
 }
 
 // ─── Scheduler Functions (Admin Only) ───────────────────────────────────────
