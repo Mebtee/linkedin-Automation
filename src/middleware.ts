@@ -6,18 +6,16 @@ import { AUTH_ROUTES, PROTECTED_ROUTES } from "@/config/protected-routes";
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
 
-  // Guard: if Supabase is slow or unreachable, don't hang the middleware.
-  // Treat the user as unauthenticated and let page-level auth handle retries.
-  let user = null;
-  try {
-    const supabase = createClient(request, response);
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch {
-    // Network failure or Supabase timeout — fail open so the request proceeds.
-    // The page/API layer will re-validate auth independently.
-    return response;
-  }
+  // Use getSession() instead of getUser() — getSession() reads the JWT from
+  // the cookie with no network call, keeping middleware under the Vercel Edge
+  // 1500 ms wall-clock limit. getUser() makes a live HTTP call to Supabase's
+  // auth server on every request and is the primary cause of
+  // MIDDLEWARE_INVOCATION_TIMEOUT. Security-sensitive checks (e.g. verifying
+  // the token hasn't been revoked) should be done in Server Components or
+  // API Route Handlers via getUser(), not here.
+  const supabase = createClient(request, response);
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const pathname = request.nextUrl.pathname;
 
