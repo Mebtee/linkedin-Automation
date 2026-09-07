@@ -5,11 +5,19 @@ import { AUTH_ROUTES, PROTECTED_ROUTES } from "@/config/protected-routes";
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
-  const supabase = createClient(request, response);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Guard: if Supabase is slow or unreachable, don't hang the middleware.
+  // Treat the user as unauthenticated and let page-level auth handle retries.
+  let user = null;
+  try {
+    const supabase = createClient(request, response);
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Network failure or Supabase timeout — fail open so the request proceeds.
+    // The page/API layer will re-validate auth independently.
+    return response;
+  }
 
   const pathname = request.nextUrl.pathname;
 
@@ -31,11 +39,14 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - _next/static, _next/image, favicon.ico (static files)
-     * - api/health (public health endpoint)
-     * - public/ (static assets)
+     * Only run middleware on page routes that need auth protection.
+     * Exclude:
+     * - /api/* routes (they handle their own auth — running getUser() on
+     *   every API call wastes Edge runtime time and causes MIDDLEWARE_INVOCATION_TIMEOUT)
+     * - _next/static, _next/image (Next.js internals)
+     * - favicon.ico and common static file extensions
+     * - /public/ assets
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|public/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|woff|woff2)$).*)",
   ],
 };
