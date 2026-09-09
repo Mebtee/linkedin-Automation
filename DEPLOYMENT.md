@@ -59,12 +59,15 @@ In the LinkedIn developer portal:
 
 ## 4. GitHub Actions scheduler
 
-Repository secrets (Settings → Secrets and variables → Actions):
+Repository secrets or variables (Settings → Secrets and variables → Actions):
 
-| Secret | Value |
+| Name | Value |
 | --- | --- |
 | `SCHEDULER_SECRET` | Same value as the server's `SCHEDULER_SECRET`. |
 | `APP_URL` | `https://<production-domain>` |
+
+If either value is missing, the workflow logs a warning and skips that run
+without failing the job.
 
 The workflow `.github/workflows/publish-scheduled.yml` runs every 5 minutes
 and can also be triggered manually from the Actions tab (**workflow_dispatch**)

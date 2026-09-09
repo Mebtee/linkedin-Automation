@@ -60,12 +60,16 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full step-by-step procedure.
 The workflow `.github/workflows/publish-scheduled.yml` runs every 5 minutes and
 POSTs to `${APP_URL}/api/scheduler/publish` with `Authorization: Bearer <SCHEDULER_SECRET>`.
 
-Configure these **repository secrets** (Settings → Secrets and variables → Actions):
+Configure either **repository secrets** or **repository variables**
+(Settings → Secrets and variables → Actions):
 
-| Secret | Value |
+| Name | Value |
 | --- | --- |
 | `SCHEDULER_SECRET` | Same value as the server's `SCHEDULER_SECRET` env var. |
 | `APP_URL` | The deployed app's public base URL (e.g. `https://your-app.vercel.app`). |
+
+If either value is missing, the workflow exits successfully with a warning and
+skips that publish attempt.
 
 GitHub Actions scheduled workflows are **not real-time**: expect publication
 delays of several minutes. Posts are never lost by delays — the publisher

@@ -25,10 +25,15 @@ jobs:
     steps:
       - name: Trigger publisher endpoint
         env:
-          SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
-          APP_URL: ${{ secrets.APP_URL }}
+          SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET || vars.SCHEDULER_SECRET }}
+          APP_URL: ${{ secrets.APP_URL || vars.APP_URL }}
         run: |
           set -euo pipefail
+
+          if [ -z "${APP_URL}" ] || [ -z "${SCHEDULER_SECRET}" ]; then
+            echo "::warning::Skipping publish: APP_URL and/or SCHEDULER_SECRET is not configured."
+            exit 0
+          fi
 
           # Fail loudly on network errors or non-2xx responses.
           http_code=$(curl -s -o response.json -w "%{http_code}" \
