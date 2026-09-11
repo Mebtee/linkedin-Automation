@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createWriteClient } from "@/lib/supabase/server";
+import { brand } from "@/config/brand";
 
 /**
  * Only same-origin relative paths may be used as the post-login destination.
@@ -76,7 +77,7 @@ async function ensureProfile(supabase: Awaited<ReturnType<typeof createWriteClie
   const { error } = await supabase.from("profiles").upsert(
     {
       id: user.id,
-      timezone: "Africa/Addis_Ababa",
+      timezone: brand.timezone,
     },
     { onConflict: "id" },
   );

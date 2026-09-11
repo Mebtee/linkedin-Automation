@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requirePublicEnv } from "@/config/env";
 import { ensureProfile } from "@/lib/auth";
 import { createWriteClient } from "@/lib/supabase/server";
+import { brand } from "@/config/brand";
 
 export async function login(formData: FormData) {
   const supabase = await createWriteClient();
@@ -43,7 +44,7 @@ export async function signup(formData: FormData) {
       // whatever origin is configured in the Supabase dashboard.
       emailRedirectTo: `${requirePublicEnv("appUrl")}/auth/callback`,
       data: {
-        timezone: "Africa/Addis_Ababa",
+        timezone: brand.timezone,
       },
     },
   });
