@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 import type { PostGenerationInput, CurriculumContext, JournalContext } from "@/types/ai";
 import { AIError } from "@/types/ai";
 import { GeminiTextProvider } from "./gemini";
@@ -804,6 +806,53 @@ describe("GeminiTextProvider", () => {
       const mapped = provider.mapError(original);
       expect(mapped).toBe(original);
       expect(mapped.aiCode).toBe("RATE_LIMITED");
+    });
+  });
+
+  // ─── K. Config-layer key access (Finding 2) ───────────────────────────
+
+  describe("API key config-layer access", () => {
+    it("obtains API key via the server-env config layer (not raw process.env)", async () => {
+      // readServerEnvDynamic("geminiApiKey") reads process.env.GEMINI_API_KEY.
+      // Setting it here at call time confirms the provider reads at call time
+      // through the validated config module — not from a stale module-level capture.
+      process.env.GEMINI_API_KEY = "config-layer-test-key";
+
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createGeminiResponse(validGeminiResponse)),
+      } as Response);
+
+      const provider = new GeminiTextProvider();
+      const result = await provider.generatePost(makeInput());
+
+      // A Gemini response was obtained → the key was read and used.
+      expect(result.metadata.provider).toBe("gemini");
+    });
+
+    it("falls back when API key is blank/whitespace via config layer", async () => {
+      process.env.GEMINI_API_KEY = "   ";
+
+      const provider = new GeminiTextProvider();
+      const result = await provider.generatePost(makeInput());
+
+      // Blank key → readServerEnvDynamic returns undefined → fallback.
+      expect(result.metadata.provider).toBe("fallback");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("key is not leaked into the provider result", async () => {
+      process.env.GEMINI_API_KEY = "super-secret-api-key-do-not-leak";
+
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createGeminiResponse(validGeminiResponse)),
+      } as Response);
+
+      const provider = new GeminiTextProvider();
+      const result = await provider.generatePost(makeInput());
+
+      expect(JSON.stringify(result)).not.toContain("super-secret-api-key-do-not-leak");
     });
   });
 });

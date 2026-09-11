@@ -49,3 +49,17 @@ export function requireServerEnv(key: ServerEnvKey): string {
     "MISSING_ENV_VAR",
   );
 }
+
+/**
+ * Reads a server-only variable at call time (not module-load time).
+ *
+ * Unlike `requireServerEnv` which reads from the `serverEnv` snapshot taken
+ * at module initialisation, this helper re-reads `process.env` on every call.
+ * Use this where the value may be set after module load (e.g. lazy providers
+ * that initialise on first use and must tolerate runtime env mutations in tests).
+ *
+ * Returns undefined when the variable is absent or blank.
+ */
+export function readServerEnvDynamic(key: ServerEnvKey): string | undefined {
+  return read(SERVER_ENV_VARS[key]);
+}

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 import type {
   PostGenerationInput,
   CurriculumContext,

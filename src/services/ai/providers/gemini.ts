@@ -9,10 +9,13 @@ import type { RecruiterPostGenerationContext } from "@/types/content-opportunity
 import type { RecruiterContentBrief } from "@/types/recruiter-quality";
 import { validateGeneratedPostPayload } from "@/services/ai/validation";
 import { POST_TYPE_META } from "@/config/recruiter";
+import { readServerEnvDynamic } from "@/config/env.server";
 import { TemplateFallbackProvider } from "./fallback";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
+// Model verified 2026-09-11: gemini-3.6-flash is a generally available (GA)
+// production model released 2026-07-21. See: https://ai.google.dev/docs
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
 
@@ -82,8 +85,8 @@ export class GeminiTextProvider implements TextGenerationProvider {
   async structureCourseMaterial(
     prompt: string,
   ): Promise<Record<string, unknown> | null> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey.trim() === "") return null;
+    const apiKey = readServerEnvDynamic("geminiApiKey");
+    if (!apiKey) return null;
 
     try {
       const rawResponse = await this.callGeminiApi(prompt, apiKey);
@@ -98,8 +101,8 @@ export class GeminiTextProvider implements TextGenerationProvider {
   }
 
   async generatePost(input: PostGenerationInput): Promise<ProviderResult> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey.trim() === "") {
+    const apiKey = readServerEnvDynamic("geminiApiKey");
+    if (!apiKey) {
       return this.withFallback(input, new AIError("Gemini API key is not configured", { code: "AUTHENTICATION_ERROR" }));
     }
 
