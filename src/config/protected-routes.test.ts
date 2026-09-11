@@ -28,4 +28,18 @@ describe("protected-routes", () => {
       PROTECTED_ROUTES.some((route) => pathname.startsWith(route)),
     ).toBe(true);
   });
+
+  // ─── /dashboard audit (Finding 6) ────────────────────────────────────────
+  // Security hardening audit found that src/app/dashboard/ exists as a
+  // directory. Confirmed: the directory is EMPTY (no page.tsx, no route.ts).
+  // An empty directory does NOT create a Next.js route, so there is no
+  // publicly accessible /dashboard route to protect at this time.
+  //
+  // If a page.tsx is ever added under src/app/dashboard/, it MUST also be
+  // added to PROTECTED_ROUTES to prevent unauthenticated access.
+  it("does not include /dashboard because no page.tsx exists there (empty directory)", () => {
+    // This is intentional: /dashboard has no page file → no route to protect.
+    // Remove this test and add /dashboard to PROTECTED_ROUTES if a page is created.
+    expect(PROTECTED_ROUTES).not.toContain("/dashboard");
+  });
 });
