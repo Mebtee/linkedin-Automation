@@ -136,13 +136,20 @@ function isInsufficientScope(
 
 /**
  * Rasterizes an SVG image to PNG. LinkedIn post images must be JPEG, PNG, or
- * GIF; SVG is never accepted. Already-bitmap inputs pass through unchanged.
+ * GIF; SVG is never accepted.
+ *
+ * For non-SVG inputs the bytes pass through unchanged and the original MIME
+ * type is preserved — returning a JPEG with "image/png" as its declared type
+ * would cause LinkedIn to reject or mishandle the upload.
+ *
+ * Exported for unit testing.
  */
-async function rasterizeToPng(
+export async function rasterizeToPng(
   input: LinkedInImageInput,
-): Promise<{ readonly bytes: Uint8Array; readonly mimeType: "image/png" }> {
+): Promise<{ readonly bytes: Uint8Array; readonly mimeType: string }> {
   if (input.mimeType !== "image/svg+xml") {
-    return { bytes: input.bytes, mimeType: "image/png" };
+    // Pass through unchanged — preserve the actual MIME type.
+    return { bytes: input.bytes, mimeType: input.mimeType };
   }
 
   const sharp = (await import("sharp")).default;

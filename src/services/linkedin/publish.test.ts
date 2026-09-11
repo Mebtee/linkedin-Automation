@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
-import { publishToLinkedIn } from "@/services/linkedin/publish";
+import { publishToLinkedIn, rasterizeToPng } from "@/services/linkedin/publish";
 import type { GeneratedPostRow } from "@/types/generated-post";
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -381,5 +381,58 @@ describe("LinkedIn Publish Service", () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe("INSUFFICIENT_SCOPE");
     });
-  });
-});
+
+  // ─── rasterizeToPng — MIME type correctness (Finding 3) ─────────────────
+
+  describe("rasterizeToPng", () => {
+    it("passes PNG bytes through unchanged and preserves mimeType as image/png", async () => {
+      const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header
+      const result = await rasterizeToPng({ bytes, mimeType: "image/png", altText: "" });
+
+      expect(result.mimeType).toBe("image/png");
+      expect(result.bytes).toBe(bytes); // same reference — no transformation
+    });
+
+    it("passes JPEG bytes through unchanged and preserves mimeType as image/jpeg (not image/png)", async () => {
+      const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]); // JPEG header
+      const result = await rasterizeToPng({ bytes, mimeType: "image/jpeg", altText: "" });
+
+      // ← This was the bug: it used to return "image/png" for JPEG input.
+      expect(result.mimeType).toBe("image/jpeg");
+      expect(result.bytes).toBe(bytes);
+    });
+
+    it("passes GIF bytes through unchanged and preserves mimeType as image/gif", async () => {
+      const bytes = new Uint8Array([0x47, 0x49, 0x46, 0x38]); // GIF header
+      const result = await rasterizeToPng({ bytes, mimeType: "image/gif", altText: "" });
+
+      expect(result.mimeType).toBe("image/gif");
+      expect(result.bytes).toBe(bytes);
+    });
+
+    it("rasterizes SVG to PNG and returns mimeType image/png", async () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="red"/></svg>';
+      const bytes = new TextEncoder().encode(svg);
+      const result = await rasterizeToPng({ bytes, mimeType: "image/svg+xml", altText: "" });
+
+      expect(result.mimeType).toBe("image/png");
+      // PNG magic bytes: 137 80 78 71
+      expect(Array.from(result.bytes.slice(0, 4))).toEqual([137, 80, 78, 71]);
+    });
+
+    it("returned mimeType always matches the actual bytes for non-SVG inputs", async () => {
+      const cases: Array<{ mimeType: string; headerBytes: number[] }> = [
+        { mimeType: "image/png", headerBytes: [137, 80, 78, 71] },
+        { mimeType: "image/jpeg", headerBytes: [0xff, 0xd8, 0xff] },
+        { mimeType: "image/gif", headerBytes: [0x47, 0x49, 0x46] },
+      ];
+
+      for (const { mimeType, headerBytes } of cases) {
+        const bytes = new Uint8Array([...headerBytes, 0x00]);
+        const result = await rasterizeToPng({ bytes, mimeType, altText: "" });
+        expect(result.mimeType).toBe(mimeType);
+      }
+    });
+  }); // end describe("rasterizeToPng")
+}); // end describe("publishToLinkedIn")
+}); // end describe("LinkedIn Publish Service")

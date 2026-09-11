@@ -151,13 +151,13 @@ export async function POST(request: Request) {
         const result = image
           ? await publishToLinkedIn(
               tokenData.token,
-              postData as unknown as GeneratedPostRow,
+              postData,
               memberUrn,
               image,
             )
           : await publishToLinkedIn(
               tokenData.token,
-              postData as unknown as GeneratedPostRow,
+              postData,
               memberUrn,
             );
 
