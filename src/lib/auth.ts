@@ -1,12 +1,9 @@
-import type { Metadata } from "next";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { AppError } from "@/lib/utils/errors";
 
 import { brand } from "@/config/brand";
-
-export const metadata: Metadata = {
-  title: "Sign in",
-};
 
 /**
  * Ensures a profile row exists for the authenticated user.
@@ -56,5 +53,32 @@ export async function getUser() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  return user;
+}
+
+/**
+ * Asserts the caller is authenticated, returning the user object.
+ *
+ * Centralised helper shared by service modules that receive a SupabaseClient
+ * parameter (e.g. scheduling, ai/generation). Throws `AppError` with the
+ * provided code when no session is found.
+ *
+ * @param supabase - An already-constructed Supabase client.
+ * @param message  - Human-readable error message (defaults to "Authentication required.").
+ * @param code     - Machine-readable error code (defaults to "AUTH_REQUIRED").
+ */
+export async function requireAuthWithClient(
+  supabase: SupabaseClient,
+  message = "Authentication required.",
+  code = "AUTH_REQUIRED",
+): Promise<{ id: string }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new AppError(message, { code });
+  }
+
   return user;
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AppError } from "@/lib/utils/errors";
+import { requireAuthWithClient } from "@/lib/auth";
 import type { PostFormat, PostGenerationInput } from "@/types/ai";
 import type { GeneratedPostRow, CreateGeneratedPostInput } from "@/types/generated-post";
 import type { JournalEntry } from "@/types/journal";
@@ -21,21 +22,6 @@ export type GenerationErrorCode =
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function requireAuth(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<{ id: string }> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new AppError("Authentication required to generate posts.", {
-      code: "GENERATION_UNAUTHORIZED",
-    });
-  }
-
-  return user;
-}
 
 async function loadCurriculumDay(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -133,7 +119,11 @@ export async function generatePostFromPreparedInput(
   const { dayNumber, journalEntryId, format, input, opportunityId } = params;
 
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(
+    supabase,
+    "Authentication required to generate posts.",
+    "GENERATION_UNAUTHORIZED",
+  );
 
   // 1. Call AI provider
   const provider = getTextGenerationProvider();

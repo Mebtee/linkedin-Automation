@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { AppError } from "@/lib/utils/errors";
+import { requireAuthWithClient } from "@/lib/auth";
 import type { GeneratedPostRow } from "@/types/generated-post";
 import {
   canTransition,
@@ -15,17 +16,6 @@ import type { GeneratedPostStatus } from "@/types/generated-post";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function requireAuth(
-  supabase: SupabaseClient,
-): Promise<{ id: string }> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    throw new AppError("Authentication required.", { code: "AUTH_REQUIRED" });
-  }
-  return user;
-}
 
 async function loadOwnPost(
   supabase: SupabaseClient,
@@ -66,7 +56,7 @@ export async function schedulePost(
   input: CreateScheduleInput,
 ): Promise<ScheduledPostRow> {
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(supabase);
 
   validateScheduleTime(input.scheduled_at);
 
@@ -124,7 +114,7 @@ export async function cancelSchedule(
   scheduleId: string,
 ): Promise<ScheduledPostRow> {
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(supabase);
 
   if (!canTransition("scheduled", "cancelled")) {
     throw new AppError("Invalid schedule transition: scheduled → cancelled.", {
@@ -168,7 +158,7 @@ export async function reschedulePost(
   newScheduledAt: string,
 ): Promise<ScheduledPostRow> {
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(supabase);
 
   if (!canTransition("scheduled", "cancelled")) {
     throw new AppError("Invalid schedule transition: scheduled → cancelled.", {
@@ -241,7 +231,7 @@ export async function getActiveSchedule(
   postId: string,
 ): Promise<ScheduledPostRow | null> {
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(supabase);
 
   const { data } = await supabase
     .from("scheduled_posts")
@@ -264,7 +254,7 @@ export async function listUserSchedules(
   limit = 100,
 ): Promise<ScheduleWithPost[]> {
   const supabase = await createClient();
-  const user = await requireAuth(supabase);
+  const user = await requireAuthWithClient(supabase);
 
   const { data: schedules, error: scheduleError } = await supabase
     .from("scheduled_posts")
