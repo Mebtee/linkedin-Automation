@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createWriteClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { log } from "@/lib/logger";
+import { brand } from "@/config/brand";
 import {
   verifyOAuthState,
   exchangeCodeForToken,
@@ -12,6 +13,37 @@ import {
 } from "@/services/linkedin";
 
 export const dynamic = "force-dynamic";
+
+// ─── In-process rate limiter ────────────────────────────────────────────────
+// Protects the OAuth callback against rapid-fire attempts that would cause
+// repeated token exchanges with LinkedIn's API (which could trigger LinkedIn's
+// own rate limits or exhaust the app's client quota).
+//
+// 10 attempts per IP per 15 minutes is well above the maximum expected rate
+// for legitimate OAuth flows (user clicks "Connect" once, then re-tries if
+// something goes wrong). Vercel serverless instances are ephemeral; the Map
+// resets on cold starts, but that is acceptable for this lightweight guard.
+
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return true;
+  }
+
+  entry.count++;
+  return false;
+}
 
 /**
  * GET /api/linkedin/callback?code=...&state=...
@@ -31,6 +63,16 @@ export async function GET(request: Request) {
   const error = searchParams.get("error");
 
   const settingsUrl = new URL(`${origin}/settings`);
+
+  // Apply rate limiting before any processing.
+  // The x-forwarded-for header is set by Vercel for all inbound requests.
+  const ip =
+    (request.headers.get("x-forwarded-for") ?? "").split(",")[0]?.trim() ||
+    "unknown";
+  if (isRateLimited(ip)) {
+    settingsUrl.searchParams.set("linkedin", "rate_limited");
+    return NextResponse.redirect(settingsUrl);
+  }
 
   // LinkedIn returned an error (e.g. user denied access)
   if (error) {
@@ -77,7 +119,7 @@ export async function GET(request: Request) {
 
     // Ensure profile exists
     await supabase.from("profiles").upsert(
-      { id: user.id, timezone: "Africa/Addis_Ababa" },
+      { id: user.id, timezone: brand.timezone },
       { onConflict: "id" },
     );
 
